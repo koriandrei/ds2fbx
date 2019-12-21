@@ -72,6 +72,8 @@
   <PropertyGroup Label="UserMacros" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
     <LinkIncremental>true</LinkIncremental>
+    <IncludePath>G:\work\FbxTestApp\inc;G:\Program Files\Autodesk\FBX\FBX SDK\2019.0\include;$(IncludePath)</IncludePath>
+    <LibraryPath>G:\Program Files\Autodesk\FBX\FBX SDK\2019.0\lib\vs2012\x86\debug;$(LibraryPath)</LibraryPath>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <LinkIncremental>true</LinkIncremental>
@@ -86,15 +88,19 @@
     <ClCompile>
       <PrecompiledHeader>Use</PrecompiledHeader>
       <WarningLevel>Level3</WarningLevel>
-      <Optimization>Disabled</Optimization>
+      <Optimization>Full</Optimization>
       <SDLCheck>true</SDLCheck>
       <PreprocessorDefinitions>WIN32;_DEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
       <PrecompiledHeaderFile>pch.h</PrecompiledHeaderFile>
+      <LanguageStandard>stdcpp17</LanguageStandard>
+      <FavorSizeOrSpeed>Speed</FavorSizeOrSpeed>
+      <BasicRuntimeChecks>Default</BasicRuntimeChecks>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
+      <AdditionalDependencies>libfbxsdk.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
@@ -151,16 +157,71 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClInclude Include="FbxTestApp.h" />
+    <ClInclude Include="Flver.h" />
+    <ClInclude Include="gmtl\AABox.h" />
+    <ClInclude Include="gmtl\AABoxOps.h" />
+    <ClInclude Include="gmtl\AxisAngle.h" />
+    <ClInclude Include="gmtl\AxisAngleOps.h" />
+    <ClInclude Include="gmtl\Comparitors.h" />
+    <ClInclude Include="gmtl\Config.h" />
+    <ClInclude Include="gmtl\Containment.h" />
+    <ClInclude Include="gmtl\Coord.h" />
+    <ClInclude Include="gmtl\CoordOps.h" />
+    <ClInclude Include="gmtl\Defines.h" />
+    <ClInclude Include="gmtl\EulerAngle.h" />
+    <ClInclude Include="gmtl\EulerAngleOps.h" />
+    <ClInclude Include="gmtl\Frustum.h" />
+    <ClInclude Include="gmtl\FrustumOps.h" />
+    <ClInclude Include="gmtl\Generate.h" />
+    <ClInclude Include="gmtl\gmtl.h" />
+    <ClInclude Include="gmtl\Helpers.h" />
+    <ClInclude Include="gmtl\Intersection.h" />
+    <ClInclude Include="gmtl\LineSeg.h" />
+    <ClInclude Include="gmtl\LineSegOps.h" />
+    <ClInclude Include="gmtl\Math.h" />
+    <ClInclude Include="gmtl\Matrix.h" />
+    <ClInclude Include="gmtl\MatrixOps.h" />
+    <ClInclude Include="gmtl\OOBox.h" />
+    <ClInclude Include="gmtl\Output.h" />
+    <ClInclude Include="gmtl\ParametricCurve.h" />
+    <ClInclude Include="gmtl\Plane.h" />
+    <ClInclude Include="gmtl\PlaneOps.h" />
+    <ClInclude Include="gmtl\Point.h" />
+    <ClInclude Include="gmtl\Quat.h" />
+    <ClInclude Include="gmtl\QuatOps.h" />
+    <ClInclude Include="gmtl\Ray.h" />
+    <ClInclude Include="gmtl\RayOps.h" />
+    <ClInclude Include="gmtl\Sphere.h" />
+    <ClInclude Include="gmtl\SphereOps.h" />
+    <ClInclude Include="gmtl\Tri.h" />
+    <ClInclude Include="gmtl\TriOps.h" />
+    <ClInclude Include="gmtl\Vec.h" />
+    <ClInclude Include="gmtl\VecBase.h" />
+    <ClInclude Include="gmtl\VecExprMeta.h" />
+    <ClInclude Include="gmtl\VecOps.h" />
+    <ClInclude Include="gmtl\VecOpsMeta.h" />
+    <ClInclude Include="gmtl\Version.h" />
+    <ClInclude Include="gmtl\Xforms.h" />
+    <ClInclude Include="Header.h" />
+    <ClInclude Include="JsonParser.h" />
+    <ClInclude Include="json\json.hpp" />
     <ClInclude Include="pch.h" />
+    <ClInclude Include="Types.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="FbxTestApp.cpp" />
+    <ClCompile Include="Flver.cpp" />
+    <ClCompile Include="JsonParser.cpp" />
     <ClCompile Include="pch.cpp">
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Create</PrecompiledHeader>
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Create</PrecompiledHeader>
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">Create</PrecompiledHeader>
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Create</PrecompiledHeader>
     </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="gmtl\gmtl.doxygen" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
