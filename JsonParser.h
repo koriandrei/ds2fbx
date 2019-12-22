@@ -4,6 +4,10 @@
 #include "Flver.h"
 #include "Types.h"
 
+#include "Hkx.h"
+
+#define JSON_FROM(PropName) {auto json_prop = j.at( #PropName ); if (!json_prop.is_null()) { json_prop.get_to(val.PropName); }}
+
 using nlohmann::json;
 namespace gmtl
 {
@@ -28,12 +32,312 @@ namespace gmtl
 
 		val = Vector4(x, y, z, w);
 	}
+
+	inline void from_json(const json& j, Quaternion& val)
+	{
+		double x, y, z, w;
+		j.at("X").get_to(x);
+		j.at("Y").get_to(y);
+		j.at("Z").get_to(z);
+		j.at("W").get_to(w);
+
+		val = Quaternion(x, y, z, w);
+	}
+}
+
+namespace Hkx
+{
+	template <class T>
+	inline void from_json(const json& j, SplineChannel<T>& val)
+	{
+		JSON_FROM(Values);
+		JSON_FROM(IsDynamic);
+
+		val.is_actually_present = !j.at("Values").is_null();
+	}
+
+	inline void from_json(const json& j, SplineTrackVector3& val)
+	{
+		JSON_FROM(ChannelX);
+		JSON_FROM(ChannelY);
+		JSON_FROM(ChannelX);
+		JSON_FROM(Knots);
+		JSON_FROM(Degree);
+	}
+
+	inline void from_json(const json& j, SplineTrackQuaternion& val)
+	{
+		JSON_FROM(Channel);
+		JSON_FROM(Knots);
+		JSON_FROM(Degree);
+	}
+	
+	inline Vector3 ParseStringVector(std::string vector_string)
+	{
+		int first_comma = vector_string.find(',');
+		int second_comma = vector_string.find(',', first_comma + 1);
+		std::string v1 = vector_string.substr(0, first_comma);
+		std::string v2 = vector_string.substr(first_comma + 1, second_comma - first_comma - 1);
+		std::string v3 = vector_string.substr(second_comma + 1);
+
+		Vector3 v;
+		
+		v[0] = std::stod(v1);
+		v[1] = std::stod(v2);
+		v[2] = std::stod(v3);
+
+		return v;
+	}
+
+	inline void from_json(const json& j, TransformMask& val)
+	{
+		JSON_FROM(PositionTypes);
+		JSON_FROM(RotationTypes);
+		JSON_FROM(ScaleTypes);
+	}
+
+	inline void from_json(const json& j, HkxTrack& val)
+	{
+		JSON_FROM(Mask);
+
+		JSON_FROM(HasSplinePosition);
+		JSON_FROM(HasSplineRotation);
+		JSON_FROM(HasSplineScale);
+		JSON_FROM(HasStaticRotation);
+
+		std::string static_position, static_scale;
+
+		j.at("StaticPosition").get_to(static_position);
+		j.at("StaticScale").get_to(static_scale);
+
+		val.StaticPosition = ParseStringVector(static_position);
+		val.StaticScale = ParseStringVector(static_scale);
+
+		JSON_FROM(/*Quaternion*/ StaticRotation);
+		JSON_FROM(SplinePosition);
+		JSON_FROM(SplineRotation);
+		JSON_FROM(SplineScale);
+	}
+
+	inline void from_json(const json& j, HkxAnim& val)
+	{
+		assert(j.at("Tracks").is_array());
+		// JSON_FROM(Tracks);
+
+		for (const json::value_type& singleTrack : j.at("Tracks"))
+		{
+			assert(singleTrack.is_array());
+			std::vector<HkxTrack> tracksArray;
+			singleTrack.get_to(tracksArray);
+
+			val.Tracks.push_back(singleTrack);
+		}
+
+		JSON_FROM(Name);
+		JSON_FROM(HkxBoneIndexToTransformTrackMap);
+		JSON_FROM(TransformTrackIndexToHkxBoneMap);
+		JSON_FROM( BlockCount);
+		JSON_FROM(NumFramesPerBlock);
+		JSON_FROM(FrameCount);
+	}
+
+	struct HkaString
+	{
+		operator std::string() const
+		{
+			return StringData;
+		}
+
+		std::string StringData;
+	};
+
+	inline void from_json(const json& j, HkaString& val)
+	{
+		JSON_FROM(StringData);
+	}
+
+	template <class T>
+	struct HkaTypeBind
+	{
+		static_assert(std::false_type<T>::value, "This bind must be specialized for different types");
+	};
+
+	template <>
+	struct HkaTypeBind<std::string>
+	{
+		typedef HkaString HkaType;
+	};
+
+
+	template <class T>
+	struct HkaArray
+	{
+		std::vector<T> Values;
+
+		operator std::vector<T>() const
+		{
+			return Values;
+		}
+	};
+
+	template <class T>
+	struct HkaTypeBind<std::vector<T>>
+	{
+		typedef HkaArray<T> HkaType;
+	};
+
+	template <class T>
+	inline void from_json(const json& j, HkaArray<T>& val)
+	{
+		std::vector<typename HkaTypeBind<T>::HkaType> HkaValues;
+
+		j.at("Values").get_to(HkaValues);
+
+		for (const auto& HkaValue: HkaValues)
+		{
+			val.Values.push_back(HkaValue);
+		}
+	}
+
+	struct HkaShort
+	{
+		short data;
+
+		operator short() const
+		{
+			return data;
+		}
+	};
+
+	template <>
+	struct HkaTypeBind<short>
+	{
+		typedef HkaShort HkaType;
+	};
+
+	inline void from_json(const json& j, HkaShort& val)
+	{
+		JSON_FROM(data);
+	}
+
+	struct HkaFloat
+	{
+		operator float() const
+		{
+			return data;
+		}
+
+		float data;
+	};
+
+	template <>
+	struct HkaTypeBind<float>
+	{
+		typedef HkaFloat HkaType;
+	};
+
+	inline void from_json(const json& j, HkaFloat& val)
+	{
+		JSON_FROM(data);
+	}
+
+#define HKA_JSON_FROM(PropName) { val.PropName = j.at(#PropName).get<HkaTypeBind<decltype(val.PropName)>::HkaType>(); }
+
+	struct HkaVector
+	{
+		Vector4 Vector;
+
+		operator Vector4() const
+		{
+			return Vector;
+		}
+	};
+
+	template <>
+	struct HkaTypeBind<Vector4>
+	{
+		typedef HkaVector HkaType;
+	};
+
+	struct HkaQuat
+	{
+		Vector4 Vector;
+
+		operator Quaternion() const
+		{
+			return Quaternion(Vector[0], Vector[1], Vector[2], Vector[3]);
+		}
+	};
+
+	template <>
+	struct HkaTypeBind<Quaternion>
+	{
+		typedef HkaQuat HkaType;
+	};
+
+
+	inline void from_json(const json& j, HkaVector& val)
+	{
+		JSON_FROM(Vector);
+	}
+
+	inline void from_json(const json& j, HkaQuat& val)
+	{
+		JSON_FROM(Vector);
+	}
+
+	template <>
+	struct HkaTypeBind<Bone>
+	{
+		typedef Bone HkaType;
+	};
+
+	template <>
+	struct HkaTypeBind<Transform>
+	{
+		typedef Transform HkaType;
+	};
+
+	inline void from_json(const json& j, Bone& val)
+	{
+		HKA_JSON_FROM(Name);
+		JSON_FROM(LockTranslation);
+	}
+
+	inline void from_json(const json& j, Transform& val)
+	{
+		HKA_JSON_FROM(Position);
+		HKA_JSON_FROM(Rotation);
+		HKA_JSON_FROM(Scale);
+	}
+
+	inline void from_json(const json& j, HkaSkeleton& val)
+	{
+		HKA_JSON_FROM(Name);
+		HKA_JSON_FROM(ParentIndices);
+		HKA_JSON_FROM(Bones);
+		HKA_JSON_FROM(Transforms);
+		HKA_JSON_FROM(ReferenceFloats);
+	}
+
+#undef HKA_JSON_FROM
+
+	inline void from_json(const json& j, File& val)
+	{
+		assert(j.is_object());
+
+		for (json::const_iterator iterator = j.cbegin(); iterator != j.cend(); ++iterator)
+		{
+			HkxAnim anim;
+			iterator.value().get_to(anim);
+			val.File.emplace(iterator.key(), anim);
+		}
+	}
 }
 
 namespace Flver
 {
 	
-#define JSON_FROM(PropName) j.at( #PropName ).get_to(val.PropName)
 
 	inline void from_json(const json& j, FaceSet& val)
 	{
@@ -109,5 +413,6 @@ namespace Flver
 		JSON_FROM(Meshes);
 		JSON_FROM(Bones);
 	}
-#undef JSON_FROM
 }
+
+#undef JSON_FROM

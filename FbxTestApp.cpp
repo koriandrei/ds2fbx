@@ -16,6 +16,8 @@
 #include <cmath>
 #include <fbxsdk.h>
 
+#include <optional>
+
 FbxVector4 Convert(const Vector3& vector)
 {
 	return FbxVector4(vector[0], vector[1], vector[2]);
@@ -119,6 +121,15 @@ static TFbxNodeHelper<TFbx, TRaw> Create(FbxScene* scene, TFbx* object, const TR
 
 typedef TFbxNodeHelper<FbxSkeleton, Flver::Bone> ParseBone;
 typedef TFbxNodeHelper<FbxMesh, Flver::Mesh> ParseMesh;
+
+struct HkxBone
+{
+	int flverIndex;
+	int ParentIndex;
+	FbxNode* node;
+	Hkx::Bone bone;
+	Hkx::Transform transform;
+};
 
 void RecurseDeep(ParseBone& currentBone, std::map<int, ParseBone>& allBones);
 
@@ -488,59 +499,506 @@ void ProcessBindPose(FbxScene* scene, std::map<int, ParseBone>& skeletonBones, s
 	}
 }
 
+std::map<int, HkxBone> PrepareAnimBones(FbxScene* scene, std::map<int, ParseBone>& bones)
+{
+	std::cout << "Reading hkx skel..." << std::endl;
+
+	nlohmann::json parsed;
+	{
+		std::ifstream stream = std::ifstream("hkx_skel.json");
+		stream >> parsed;
+	}
+
+	std::cout << "Read hkx skel." << std::endl;
+
+	Hkx::HkaSkeleton skel;
+
+	parsed.get_to(skel);
+
+	std::cout << "Parsed skel" << std::endl;
+
+	std::map<int, HkxBone> hkxBones;
+
+	for (int hkxBoneIndex = 0; hkxBoneIndex < skel.Bones.size(); ++hkxBoneIndex)
+	{
+		const Hkx::Bone& bone = skel.Bones[hkxBoneIndex];
+
+		auto flverBone = std::find_if(bones.begin(), bones.end(), [hkxBoneName = bone.Name](const std::pair<const int, ParseBone>& iter) -> bool { return iter.second.raw.Name == hkxBoneName; });
+
+		assert(flverBone != bones.end());
+
+		const short boneParent = skel.ParentIndices[hkxBoneIndex];
+		const Hkx::Transform& transform = skel.Transforms[hkxBoneIndex];
+
+		HkxBone hkxBone;
+	
+		hkxBone.bone = bone;
+
+		hkxBone.ParentIndex = boneParent;
+		hkxBone.transform = transform;
+
+		hkxBone.flverIndex = flverBone->first;
+		hkxBone.node = flverBone->second.node;
+
+		hkxBones.emplace(hkxBoneIndex, hkxBone);
+
+		std::cout << "Parsed HKX bone " << hkxBone.bone.Name << ", found its FLVER index " << hkxBone.flverIndex << std::endl;
+	}
+
+	return hkxBones;
+}
+
+
+struct FbxAnimNodes
+{
+	struct FbxAnimNodeCurve
+	{
+		FbxAnimNodeCurve(FbxAnimLayer* animLayer, FbxPropertyT<FbxDouble3>& in_node) : node(in_node.GetCurveNode(animLayer))
+		{
+			std::cout << "Beginning key edition..." << std::endl;
+
+			curveX = in_node.GetCurve(animLayer, FBXSDK_CURVENODE_COMPONENT_X, /*pCreate =*/ true);
+			assert(curveX != nullptr);
+			curveY = in_node.GetCurve(animLayer, FBXSDK_CURVENODE_COMPONENT_Y, /*pCreate =*/ true);
+			assert(curveY != nullptr);
+			curveZ = in_node.GetCurve(animLayer, FBXSDK_CURVENODE_COMPONENT_Z, /*pCreate =*/ true);
+			assert(curveZ != nullptr);
+
+			curveX->KeyModifyBegin();
+			curveY->KeyModifyBegin();
+			curveZ->KeyModifyBegin();
+		}
+
+		void Finish()
+		{
+			std::cout << "Finishing key edition..." << std::endl;
+
+			if (curveX != nullptr)
+			{
+				curveX->KeyModifyEnd();
+				curveX = nullptr;
+			}
+
+			if (curveY != nullptr)
+			{
+				curveY->KeyModifyEnd();
+				curveY = nullptr;
+			}
+
+			if (curveZ != nullptr)
+			{
+				curveZ->KeyModifyEnd();
+				curveZ = nullptr;
+			}
+		}
+
+		FbxAnimCurveNode* node = nullptr;
+
+		FbxAnimCurve* curveX = nullptr;
+		FbxAnimCurve* curveY = nullptr;
+		FbxAnimCurve* curveZ = nullptr;
+	};
+
+	FbxAnimNodes(FbxAnimLayer* animLayer, FbxPropertyT<FbxDouble3>& translationNode, FbxPropertyT<FbxDouble3>&  rotationNode, FbxPropertyT<FbxDouble3>&  scaleNode) : translation(animLayer, translationNode), rotation(animLayer, rotationNode), scale(animLayer, scaleNode) {}
+
+	FbxAnimNodeCurve translation;
+	FbxAnimNodeCurve rotation;
+	FbxAnimNodeCurve scale;
+};
+
+
+enum class VectorPart { X, Y, Z, };
+enum class TransformPart { Position, Scale, };
+
+template <VectorPart part>
+struct VectorPartHelper
+{
+};
+
+template <>
+struct VectorPartHelper<VectorPart::X>
+{
+	static constexpr Hkx::FlagOffset StaticOffsetFlag = Hkx::FlagOffset::StaticX;
+
+	static constexpr FbxAnimCurve* FbxAnimNodes::FbxAnimNodeCurve::* AnimNodeCurvePtr = &FbxAnimNodes::FbxAnimNodeCurve::curveX;
+
+	static float GetValue(const Vector3& Value) 
+	{
+		return Value[0];
+	}
+
+	static const Hkx::SplineChannel<float>& GetChannel(const Hkx::SplineTrackVector3& Spline)
+	{
+		return Spline.ChannelX;
+	}
+};
+
+template <>
+struct VectorPartHelper<VectorPart::Y>
+{
+	static constexpr Hkx::FlagOffset StaticOffsetFlag = Hkx::FlagOffset::StaticY;
+	static constexpr FbxAnimCurve* FbxAnimNodes::FbxAnimNodeCurve::* AnimNodeCurvePtr = &FbxAnimNodes::FbxAnimNodeCurve::curveY;
+
+	static float GetValue(const Vector3& Value)
+	{
+		return Value[1];
+	}
+
+	static const Hkx::SplineChannel<float>& GetChannel(const Hkx::SplineTrackVector3& Spline)
+	{
+		return Spline.ChannelY;
+	}
+};
+
+template <>
+struct VectorPartHelper<VectorPart::Z>
+{
+	static constexpr Hkx::FlagOffset StaticOffsetFlag = Hkx::FlagOffset::StaticZ;
+	static constexpr FbxAnimCurve* FbxAnimNodes::FbxAnimNodeCurve::* AnimNodeCurvePtr = &FbxAnimNodes::FbxAnimNodeCurve::curveZ;
+
+	static float GetValue(const Vector3& Value)
+	{
+		return Value[2];
+	}
+
+	static const Hkx::SplineChannel<float>& GetChannel(const Hkx::SplineTrackVector3& Spline)
+	{
+		return Spline.ChannelZ;
+	}
+};
+
+template <TransformPart part>
+struct TransformPartHelper
+{
+};
+
+template <>
+struct TransformPartHelper<TransformPart::Position>
+{
+	static constexpr FbxAnimNodes::FbxAnimNodeCurve FbxAnimNodes::* AnimNodeCurvePtr = &FbxAnimNodes::translation;
+
+	static Vector3 GetStaticOffset(const Hkx::HkxTrack& track)
+	{
+		return track.StaticPosition;
+	}
+
+	static const Hkx::SplineTrackVector3& GetSpline(const Hkx::HkxTrack& Track)
+	{
+		return Track.SplinePosition;
+	}
+
+	static bool HasSpline(const Hkx::HkxTrack& Track)
+	{
+		return Track.HasSplinePosition;
+	}
+
+	static const std::vector<Hkx::FlagOffset>& GetFlags(const Hkx::HkxTrack& Track)
+	{
+		return Track.Mask.PositionTypes;
+	}
+};
+
+template <>
+struct TransformPartHelper<TransformPart::Scale>
+{
+	static constexpr FbxAnimNodes::FbxAnimNodeCurve FbxAnimNodes::* AnimNodeCurvePtr = &FbxAnimNodes::scale;
+
+	static Vector3 GetStaticOffset(const Hkx::HkxTrack& track)
+	{
+		return track.StaticScale;
+	}
+
+	static const Hkx::SplineTrackVector3& GetSpline(const Hkx::HkxTrack& Track)
+	{
+		return Track.SplineScale;
+	}
+
+	static bool HasSpline(const Hkx::HkxTrack& Track)
+	{
+		return Track.HasSplineScale;
+	}
+
+	static const std::vector<Hkx::FlagOffset>& GetFlags(const Hkx::HkxTrack& Track)
+	{
+		return Track.Mask.ScaleTypes;
+	}
+};
+
+template <class T>
+struct NurbsHelper
+{
+	static int FindKnotSpan(int degree, float value, int pointsCount, const std::vector<uint8>& knots)
+	{
+		if (value >= knots[pointsCount])
+		{
+			return pointsCount - 1;
+		}
+
+		int low = degree;
+		int high = pointsCount;
+		int mid = (low + high) / 2;
+
+		while (value < knots[mid] || value >= knots[mid + 1])
+		{
+			if (value < knots[mid])
+			{
+				high = mid;
+			}
+			else
+			{
+				low = mid;
+			}
+
+			mid = (low + high) / 2;
+		}
+
+		return mid;
+	}
+	static T Evaluate(int degree, float frame, const std::vector<uint8>& knots, const std::vector<T>& controlPoints)
+	{
+		return Evaluate(FindKnotSpan(degree, frame, controlPoints.size(), knots), degree, frame, knots, controlPoints);
+	}
+
+	static T Evaluate(int knotSpan, int degree, float frame, const std::vector<uint8>& knots, const std::vector<T>& controlPoints)
+	{
+		const int controlPointsCount = controlPoints.size();
+
+		if (controlPointsCount == 1)
+		{
+			return controlPoints[0];
+		}
+
+		const int span = knotSpan;
+
+		double N[] = { 1.0f, 0, 0, 0, 0 };
+
+		for (int i = 1; i <= degree; i++)
+		{
+			for (int j = i - 1; j >= 0; j--)
+			{
+				float A = (frame - knots[span - j]) / (knots[span + i - j] - knots[span - j]);
+				// without multiplying A, model jitters slightly
+				float tmp = N[j] * A;
+				// without subtracting tmp, model flies away then resets to origin every few frames
+				N[j + 1] += N[j] - tmp;
+				// without setting to tmp, model either is moved from origin or grows very long limbs
+				// depending on the animation
+				N[j] = tmp;
+			}
+		}
+
+		T retVal = T();
+
+		for (int i = 0; i <= degree; i++)
+		{
+			retVal += controlPoints[span - i] * N[i];
+		}
+
+		return retVal;
+	}
+};
+
+template <TransformPart transformPart, VectorPart vectorPart>
+struct VectorSplineHelper
+{
+	typedef TransformPartHelper<transformPart> TransformHelper;
+	typedef VectorPartHelper<vectorPart> VectorHelper;
+
+	static int FindKnotSpan(int degree, float value, int pointsCount, const std::vector<uint8>& knots)
+	{
+		return NurbsHelper::FindKnotSpan(degree, value, pointsCount, knots);
+	}
+
+	static std::optional<float> Evaluate(const Hkx::HkxTrack& track, int Frame)
+	{
+		if (!TransformHelper::HasSpline(track))
+		{
+			const std::vector<Hkx::FlagOffset>& flags = TransformHelper::GetFlags(track);
+
+			if (std::find(flags.cbegin(), flags.cend(), VectorHelper::StaticOffsetFlag) != flags.cend())
+			{
+				return static_cast<float>( VectorHelper::GetValue(TransformHelper::GetStaticOffset(track)));
+			}
+		}
+		{
+			const Hkx::SplineTrackVector3& spline = TransformHelper::GetSpline(track);
+
+			const Hkx::SplineChannel<float>& channel = VectorHelper::GetChannel(spline);
+
+			if (!channel.is_actually_present)
+			{
+				return {};
+			}
+
+			const std::vector<float> controlPoints = channel.Values;
+
+			return NurbsHelper<float>::Evaluate(spline.Degree, Frame, spline.Knots, controlPoints);
+		}
+
+		return {};
+	}
+
+	static void ProcessFbxBones(FbxAnimNodes& nodes, const Hkx::HkxTrack& track, const FbxTime& time, int frame)
+	{
+		FbxAnimNodes::FbxAnimNodeCurve& nodeCurve = nodes.*TransformHelper::AnimNodeCurvePtr;
+
+		FbxAnimCurve* fbxCurve = nodeCurve.*VectorHelper::AnimNodeCurvePtr;
+
+		const std::optional<float> evaluated = Evaluate(track, frame);
+
+		if (evaluated.has_value())
+		{
+			FbxAnimCurveKey key(time, evaluated.value());
+			fbxCurve->KeyAdd(time, key);
+		}
+	}
+};
+
+void ParseAnimations(FbxScene* scene, std::map<int, HkxBone>& animBones)
+{
+	std::cout << "Reading hkx animations..." << std::endl;
+
+	nlohmann::json parsed;
+	{
+		std::ifstream stream = std::ifstream("hkx_anims.json");
+		stream >> parsed;
+	}
+
+	std::cout << "Read hkx anims." << std::endl;
+
+	//Hkx::File animFile;
+
+	std::map<std::string, Hkx::HkxAnim> animFile;
+
+	//parsed.get_to(animFile);
+
+	Hkx::HkxAnim anim11;
+
+	parsed.at("a000_000020.hkx").get_to(anim11);
+
+	animFile.emplace("a000_000020.hkx", anim11);
+
+	std::cout << "Parsed hkx anims." << std::endl;
+
+	
+
+	int index = 0;
+	const int exportAnimsCount = 10;
+
+	for (const std::pair<std::string, Hkx::HkxAnim>& animPair : animFile)
+	{
+		if (++index > exportAnimsCount)
+		{
+			continue;
+		}
+
+		const std::string& animName = animPair.first;
+		const Hkx::HkxAnim& anim = animPair.second;
+
+		std::cout << "Exporting animation " << animName << std::endl;
+
+
+		FbxAnimStack* animStack = FbxAnimStack::Create(scene, animName.c_str());
+
+		FbxAnimLayer* animLayer = FbxAnimLayer::Create(animStack, "Layer0");
+
+		animStack->AddMember(animLayer);
+
+
+		std::map<int, FbxAnimNodes> nodes;
+
+		for (std::pair<const int, HkxBone>& bonePair : animBones)
+		{
+			const int boneIndex = bonePair.first;
+			HkxBone& bone = bonePair.second;
+
+			bone.node->LclTranslation.GetCurveNode(animLayer, /*bCreate =*/ true);
+			bone.node->LclRotation.GetCurveNode(animLayer, /*bCreate =*/ true);
+			bone.node->LclScaling.GetCurveNode(animLayer, /*bCreate =*/ true);
+
+			nodes.emplace(boneIndex, FbxAnimNodes(animLayer, bone.node->LclTranslation, bone.node->LclRotation, bone.node->LclScaling));
+		}
+
+		for (int frameIndex = 0; frameIndex < anim.FrameCount; ++frameIndex)
+		{
+				FbxTime time;
+				time.SetFrame(frameIndex);
+
+				const int blockIndex = static_cast<int>(std::floor(((double)frameIndex) / anim.NumFramesPerBlock));
+
+				for (std::pair<const int, HkxBone>& bonePair : animBones)
+				{
+					const int boneIndex = bonePair.first;
+					HkxBone& bone = bonePair.second;
+					FbxAnimNodes& node = nodes.at(boneIndex);
+					
+					const int trackIndex = anim.HkxBoneIndexToTransformTrackMap[boneIndex];
+
+					assert(trackIndex >= 0);
+
+					const Hkx::HkxTrack& track = anim.Tracks[blockIndex][trackIndex];
+
+					VectorSplineHelper<TransformPart::Position, VectorPart::X>::ProcessFbxBones(node, track, time, frameIndex);
+					VectorSplineHelper<TransformPart::Position, VectorPart::Y>::ProcessFbxBones(node, track, time, frameIndex);
+					VectorSplineHelper<TransformPart::Position, VectorPart::Z>::ProcessFbxBones(node, track, time, frameIndex);
+
+					VectorSplineHelper<TransformPart::Scale, VectorPart::X>::ProcessFbxBones(node, track, time, frameIndex);
+					VectorSplineHelper<TransformPart::Scale, VectorPart::Y>::ProcessFbxBones(node, track, time, frameIndex);
+					VectorSplineHelper<TransformPart::Scale, VectorPart::Z>::ProcessFbxBones(node, track, time, frameIndex);
+
+					std::optional<Quaternion> rotationToSet;
+
+					if (track.HasSplineRotation)
+					{
+						const Hkx::SplineTrackQuaternion& rotationTrack = track.SplineRotation;
+
+						rotationToSet = NurbsHelper<Quaternion>::Evaluate(rotationTrack.Degree, frameIndex, rotationTrack.Knots, track.SplineRotation.Channel.Values);
+					}
+					else if (track.HasStaticRotation)
+					{
+						rotationToSet = track.StaticRotation;
+					}
+					else
+					{
+						rotationToSet = bone.transform.Rotation;
+					}
+					
+					if (rotationToSet.has_value())
+					{
+						const gmtl::EulerAngleXYZd euler = gmtl::makeRot < gmtl::EulerAngleXYZd>(gmtl::makeRot<Matrix4x4>(rotationToSet.value()));
+
+						FbxAnimCurveKey KeyX(time, euler[0]);
+						FbxAnimCurveKey KeyY(time, euler[1]);
+						FbxAnimCurveKey KeyZ(time, euler[2]);
+
+						node.rotation.curveX->KeyAdd(time, KeyX);
+						node.rotation.curveY->KeyAdd(time, KeyY);
+						node.rotation.curveZ->KeyAdd(time, KeyZ);
+					}
+				}
+		}
+		
+		for (std::pair<const int, FbxAnimNodes>& nnode : nodes)
+		{
+			nnode.second.translation.Finish();
+			nnode.second.rotation.Finish();
+			nnode.second.scale.Finish();
+		}
+
+		std::cout << "Exported!" << std::endl << std::endl;
+	}
+}
 
 int main()
 {
-	Matrix4x4 m1, m2;
-
-
-	m1(1, 1) = -0.99999999999545919;
-	m1(1, 2) = -3.0135897933838376e-06;
-	m1(2, 1) = 3.0135897933838376e-06;
-	m1(2, 2) = -0.99999999999545919;
-	m1(3, 0) = 0.18;
-	m1(3, 1) = 1.5560814899999998e-08;
-	m1(3, 2) = -0.00020003691299999999;
-
-
-	m1.setState(Matrix4x4::FULL);
-
-	const double ZRotation = 1.5707962499999999;
-
-
-	Matrix4x4 rotZM;
-	gmtl::setRot(rotZM, gmtl::EulerAngleXYZd(0, 0, ZRotation));
-
-	gmtl::zero(m2);
-	m2(1, 0) = -1;
-	m2(0, 1) = 1;
-	m2(2, 2) = 1;
-	m2(3, 3) = 1;
-
-	m2.setState(Matrix4x4::FULL);
-
-	Matrix4x4 testm = m1;
-	testm *= rotZM;
-
-	std::cout << "row 0 col 3 " << testm(0, 3) << " via braces " << testm[0][3] << std::endl;
-	std::cout << "row 3 col 0 " << testm(3, 0) << " via braces " << testm[3][0] << std::endl;
-
-	std::cout << "row 1 col 3 " << testm(1, 3) << " via braces " << testm[1][3] << std::endl;
-	std::cout << "row 3 col 1 " << testm(3, 1) << " via braces " << testm[3][1] << std::endl;
-
-	std::string file_contents;
+	std::cout << "Reading flver..." << std::endl;
 	nlohmann::json parsed;
 	{
 		std::ifstream stream = std::ifstream("flver.json");
 		stream >> parsed;
-		//do
-		//{
-
-		//	stream >> file_contents;
-		//} while (!stream.eof());
 	}
 
-	std::cout << "Read input" << std::endl;
+	std::cout << "Read flver." << std::endl;
 	
 	Flver::Flver f;
 	parsed.get_to(f);
@@ -599,6 +1057,9 @@ int main()
 
 	ProcessBindPose(scene, skeletonBones, meshes);
 
+	std::map<int, HkxBone> animBones = PrepareAnimBones(scene, skeletonBones);
+
+	ParseAnimations(scene, animBones);
 
 	FbxExporter* ex = FbxExporter::Create(manager, "");
 
