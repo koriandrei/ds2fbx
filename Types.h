@@ -8,6 +8,8 @@
 
 #include "gmtl/Generate.h"
 
+#include "gmtl/EulerAngleOps.h"
+
 typedef gmtl::Vec3d Vector3;
 typedef gmtl::Vec3i Vector3I;
 

@@ -569,6 +569,16 @@ struct FbxAnimNodes
 			curveZ->KeyModifyBegin();
 		}
 
+		void AddPoint(const FbxTime& time, const FbxVector4& value)
+		{
+			FbxAnimCurveKey xKey(time, value[0]);
+			curveX->KeyAdd(time, xKey);
+			FbxAnimCurveKey yKey(time, value[1]);
+			curveY->KeyAdd(time, xKey);
+			FbxAnimCurveKey zKey(time, value[2]);
+			curveZ->KeyAdd(time, xKey);
+		}
+
 		void Finish()
 		{
 			std::cout << "Finishing key edition..." << std::endl;
@@ -682,6 +692,11 @@ struct TransformPartHelper<TransformPart::Position>
 		return track.StaticPosition;
 	}
 
+	static Vector3 GetTransform(const Hkx::Transform& transform)
+	{
+		return Vector3(transform.Position[0], transform.Position[1], transform.Position[2]);
+	}
+
 	static const Hkx::SplineTrackVector3& GetSpline(const Hkx::HkxTrack& Track)
 	{
 		return Track.SplinePosition;
@@ -708,6 +723,11 @@ struct TransformPartHelper<TransformPart::Scale>
 		return track.StaticScale;
 	}
 
+	static Vector3 GetTransform(const Hkx::Transform& transform)
+	{
+		return Vector3(transform.Scale[0], transform.Scale[1], transform.Scale[2]);
+	}
+
 	static const Hkx::SplineTrackVector3& GetSpline(const Hkx::HkxTrack& Track)
 	{
 		return Track.SplineScale;
@@ -724,7 +744,7 @@ struct TransformPartHelper<TransformPart::Scale>
 	}
 };
 
-template <class T>
+template <class T, bool CombineByAddition>
 struct NurbsHelper
 {
 	static int FindKnotSpan(int degree, float value, int pointsCount, const std::vector<uint8>& knots)
@@ -791,7 +811,16 @@ struct NurbsHelper
 
 		for (int i = 0; i <= degree; i++)
 		{
-			retVal += controlPoints[span - i] * N[i];
+			const T& combineWith = controlPoints[span - i] * N[i];
+			
+			if (CombineByAddition)
+			{
+				retVal += combineWith;
+			}
+			else
+			{
+				retVal *= combineWith;
+			}
 		}
 
 		return retVal;
@@ -809,9 +838,22 @@ struct VectorSplineHelper
 		return NurbsHelper::FindKnotSpan(degree, value, pointsCount, knots);
 	}
 
-	static std::optional<float> Evaluate(const Hkx::HkxTrack& track, int Frame)
+	static float Evaluate(const Hkx::HkxTrack& track, const Hkx::Transform& transform, int Frame)
 	{
-		if (!TransformHelper::HasSpline(track))
+		if (TransformHelper::HasSpline(track))
+		{
+			const Hkx::SplineTrackVector3& spline = TransformHelper::GetSpline(track);
+
+			const Hkx::SplineChannel<float>& channel = VectorHelper::GetChannel(spline);
+
+			if (channel.is_actually_present)
+			{
+				const std::vector<float> controlPoints = channel.Values;
+
+				return NurbsHelper<float, true>::Evaluate(spline.Degree, Frame, spline.Knots, controlPoints);
+			}
+		}
+		else
 		{
 			const std::vector<Hkx::FlagOffset>& flags = TransformHelper::GetFlags(track);
 
@@ -820,37 +862,20 @@ struct VectorSplineHelper
 				return static_cast<float>( VectorHelper::GetValue(TransformHelper::GetStaticOffset(track)));
 			}
 		}
-		{
-			const Hkx::SplineTrackVector3& spline = TransformHelper::GetSpline(track);
 
-			const Hkx::SplineChannel<float>& channel = VectorHelper::GetChannel(spline);
-
-			if (!channel.is_actually_present)
-			{
-				return {};
-			}
-
-			const std::vector<float> controlPoints = channel.Values;
-
-			return NurbsHelper<float>::Evaluate(spline.Degree, Frame, spline.Knots, controlPoints);
-		}
-
-		return {};
+		return VectorHelper::GetValue(TransformHelper::GetTransform(transform));
 	}
 
-	static void ProcessFbxBones(FbxAnimNodes& nodes, const Hkx::HkxTrack& track, const FbxTime& time, int frame)
+	static void ProcessFbxBones(FbxAnimNodes& nodes, const FbxTime& time, const Hkx::HkxTrack& track, const Hkx::Transform& transform, int frame)
 	{
 		FbxAnimNodes::FbxAnimNodeCurve& nodeCurve = nodes.*TransformHelper::AnimNodeCurvePtr;
 
 		FbxAnimCurve* fbxCurve = nodeCurve.*VectorHelper::AnimNodeCurvePtr;
 
-		const std::optional<float> evaluated = Evaluate(track, frame);
+		const float evaluated = Evaluate(track, transform, frame);
 
-		if (evaluated.has_value())
-		{
-			FbxAnimCurveKey key(time, evaluated.value());
-			fbxCurve->KeyAdd(time, key);
-		}
+		FbxAnimCurveKey key(time, evaluated);
+		fbxCurve->KeyAdd(time, key);
 	}
 };
 
@@ -924,7 +949,9 @@ void ParseAnimations(FbxScene* scene, std::map<int, HkxBone>& animBones)
 				FbxTime time;
 				time.SetFrame(frameIndex);
 
-				const int blockIndex = static_cast<int>(std::floor(((double)frameIndex) / anim.NumFramesPerBlock));
+				const int frameInBlockIndex = frameIndex % anim.NumFramesPerBlock;
+
+				const int blockIndex = static_cast<int>(std::floor(((double)(frameInBlockIndex)) / anim.NumFramesPerBlock));
 
 				for (std::pair<const int, HkxBone>& bonePair : animBones)
 				{
@@ -938,21 +965,35 @@ void ParseAnimations(FbxScene* scene, std::map<int, HkxBone>& animBones)
 
 					const Hkx::HkxTrack& track = anim.Tracks[blockIndex][trackIndex];
 
-					VectorSplineHelper<TransformPart::Position, VectorPart::X>::ProcessFbxBones(node, track, time, frameIndex);
-					VectorSplineHelper<TransformPart::Position, VectorPart::Y>::ProcessFbxBones(node, track, time, frameIndex);
-					VectorSplineHelper<TransformPart::Position, VectorPart::Z>::ProcessFbxBones(node, track, time, frameIndex);
+					 //VectorSplineHelper<TransformPart::Position, VectorPart::X>::ProcessFbxBones(node, time, track, bone.transform, frameInBlockIndex);
+					 //VectorSplineHelper<TransformPart::Position, VectorPart::Y>::ProcessFbxBones(node, time, track, bone.transform, frameInBlockIndex);
+					 //VectorSplineHelper<TransformPart::Position, VectorPart::Z>::ProcessFbxBones(node, time, track, bone.transform, frameInBlockIndex);
 
-					VectorSplineHelper<TransformPart::Scale, VectorPart::X>::ProcessFbxBones(node, track, time, frameIndex);
-					VectorSplineHelper<TransformPart::Scale, VectorPart::Y>::ProcessFbxBones(node, track, time, frameIndex);
-					VectorSplineHelper<TransformPart::Scale, VectorPart::Z>::ProcessFbxBones(node, track, time, frameIndex);
+					 //VectorSplineHelper<TransformPart::Scale, VectorPart::X>::ProcessFbxBones(node, time, track, bone.transform, frameInBlockIndex);
+					 //VectorSplineHelper<TransformPart::Scale, VectorPart::Y>::ProcessFbxBones(node, time, track, bone.transform, frameInBlockIndex);
+					 //VectorSplineHelper<TransformPart::Scale, VectorPart::Z>::ProcessFbxBones(node, time, track, bone.transform, frameInBlockIndex);
 
-					std::optional<Quaternion> rotationToSet;
+
+					auto posX = VectorSplineHelper<TransformPart::Position, VectorPart::X>::Evaluate(track, bone.transform, frameInBlockIndex);
+					auto posY = VectorSplineHelper<TransformPart::Position, VectorPart::Y>::Evaluate(track, bone.transform, frameInBlockIndex);
+					auto posZ = VectorSplineHelper<TransformPart::Position, VectorPart::Z>::Evaluate(track, bone.transform, frameInBlockIndex);
+
+					auto scaleX = VectorSplineHelper<TransformPart::Scale, VectorPart::X>::Evaluate(track, bone.transform, frameInBlockIndex);
+					auto scaleY = VectorSplineHelper<TransformPart::Scale, VectorPart::Y>::Evaluate(track, bone.transform, frameInBlockIndex);
+					auto scaleZ = VectorSplineHelper<TransformPart::Scale, VectorPart::Z>::Evaluate(track, bone.transform, frameInBlockIndex);
+
+					Matrix4x4 translate;
+					gmtl::setTrans(translate, Vector3(posX, posY, posZ));
+					Matrix4x4 scale;
+					gmtl::setScale(scale, Vector3(scaleX, scaleY, scaleZ));
+
+					Quaternion rotationToSet;
 
 					if (track.HasSplineRotation)
 					{
 						const Hkx::SplineTrackQuaternion& rotationTrack = track.SplineRotation;
 
-						rotationToSet = NurbsHelper<Quaternion>::Evaluate(rotationTrack.Degree, frameIndex, rotationTrack.Knots, track.SplineRotation.Channel.Values);
+						rotationToSet = NurbsHelper<Quaternion, false>::Evaluate(rotationTrack.Degree, frameIndex, rotationTrack.Knots, track.SplineRotation.Channel.Values);
 					}
 					else if (track.HasStaticRotation)
 					{
@@ -962,19 +1003,27 @@ void ParseAnimations(FbxScene* scene, std::map<int, HkxBone>& animBones)
 					{
 						rotationToSet = bone.transform.Rotation;
 					}
-					
-					if (rotationToSet.has_value())
-					{
-						const gmtl::EulerAngleXYZd euler = gmtl::makeRot < gmtl::EulerAngleXYZd>(gmtl::makeRot<Matrix4x4>(rotationToSet.value()));
 
-						FbxAnimCurveKey KeyX(time, euler[0]);
-						FbxAnimCurveKey KeyY(time, euler[1]);
-						FbxAnimCurveKey KeyZ(time, euler[2]);
 
-						node.rotation.curveX->KeyAdd(time, KeyX);
-						node.rotation.curveY->KeyAdd(time, KeyY);
-						node.rotation.curveZ->KeyAdd(time, KeyZ);
-					}
+					Matrix4x4 rot;
+					gmtl::setRot(rot, rotationToSet);
+
+					Matrix4x4 finalTransform = translate * rot *scale;// * rot;
+
+					FbxMatrix fbxM(
+						finalTransform(0, 0), finalTransform(0, 1), finalTransform(0, 2), finalTransform(0, 3),
+						finalTransform(1, 0), finalTransform(1, 1), finalTransform(1, 2), finalTransform(1, 3),
+						finalTransform(2, 0), finalTransform(2, 1), finalTransform(2, 2), finalTransform(2, 3),
+						finalTransform(3, 0), finalTransform(3, 1), finalTransform(3, 2), finalTransform(3, 3)
+					);
+
+					FbxVector4 translateV, scaleV, rotateV, shearingDummyV;
+					double signDummy;
+					fbxM.Transpose().GetElements(translateV, rotateV, shearingDummyV, scaleV, signDummy);
+
+					node.translation.AddPoint(time, translateV);
+					node.rotation.AddPoint(time, rotateV);
+					node.scale.AddPoint(time, scaleV);
 				}
 		}
 		
