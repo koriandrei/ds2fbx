@@ -744,6 +744,26 @@ struct TransformPartHelper<TransformPart::Scale>
 	}
 };
 
+template <class T>
+struct NurbsDefaultValueHelper
+{
+
+};
+
+template<>
+struct NurbsDefaultValueHelper<float>
+{
+	constexpr static float Value = 0.0f;
+};
+
+template<>
+struct NurbsDefaultValueHelper<Quaternion>
+{
+	static const Quaternion Value;
+};
+
+const Quaternion NurbsDefaultValueHelper<Quaternion>::Value = Quaternion(0, 0, 0, 0);
+
 template <class T, bool CombineByAddition>
 struct NurbsHelper
 {
@@ -807,7 +827,7 @@ struct NurbsHelper
 			}
 		}
 
-		T retVal = T();
+		T retVal = NurbsDefaultValueHelper<T>::Value;
 
 		for (int i = 0; i <= degree; i++)
 		{
@@ -879,6 +899,19 @@ struct VectorSplineHelper
 	}
 };
 
+FbxMatrix Convert(const Matrix4x4& matrix)
+{
+		FbxMatrix fbxM(
+			matrix(0, 0), matrix(0, 1), matrix(0, 2), matrix(0, 3),
+			matrix(1, 0), matrix(1, 1), matrix(1, 2), matrix(1, 3),
+			matrix(2, 0), matrix(2, 1), matrix(2, 2), matrix(2, 3),
+			matrix(3, 0), matrix(3, 1), matrix(3, 2), matrix(3, 3)
+		);
+
+		return fbxM;
+}
+
+
 void ParseAnimations(FbxScene* scene, std::map<int, HkxBone>& animBones)
 {
 	std::cout << "Reading hkx animations..." << std::endl;
@@ -946,85 +979,167 @@ void ParseAnimations(FbxScene* scene, std::map<int, HkxBone>& animBones)
 
 		for (int frameIndex = 0; frameIndex < anim.FrameCount; ++frameIndex)
 		{
-				FbxTime time;
-				time.SetFrame(frameIndex);
+			FbxTime time;
+			time.SetFrame(frameIndex);
 
-				const int frameInBlockIndex = frameIndex % anim.NumFramesPerBlock;
+			const int frameInBlockIndex = frameIndex % anim.NumFramesPerBlock;
 
-				const int blockIndex = static_cast<int>(std::floor(((double)(frameInBlockIndex)) / anim.NumFramesPerBlock));
+			const int blockIndex = static_cast<int>(std::floor(((double)(frameInBlockIndex)) / anim.NumFramesPerBlock));
 
-				for (std::pair<const int, HkxBone>& bonePair : animBones)
+			std::cout << "time is " << frameIndex << std::endl;
+
+			std::map<int, Matrix4x4> localBoneTransforms;
+
+			for (std::pair<const int, HkxBone>& bonePair : animBones)
+			{
+				const int boneIndex = bonePair.first;
+				HkxBone& bone = bonePair.second;
+				//FbxAnimNodes& node = nodes.at(boneIndex);
+
+
+				if (frameIndex == 1)
 				{
-					const int boneIndex = bonePair.first;
-					HkxBone& bone = bonePair.second;
-					FbxAnimNodes& node = nodes.at(boneIndex);
-					
-					const int trackIndex = anim.HkxBoneIndexToTransformTrackMap[boneIndex];
-
-					assert(trackIndex >= 0);
-
-					const Hkx::HkxTrack& track = anim.Tracks[blockIndex][trackIndex];
-
-					 //VectorSplineHelper<TransformPart::Position, VectorPart::X>::ProcessFbxBones(node, time, track, bone.transform, frameInBlockIndex);
-					 //VectorSplineHelper<TransformPart::Position, VectorPart::Y>::ProcessFbxBones(node, time, track, bone.transform, frameInBlockIndex);
-					 //VectorSplineHelper<TransformPart::Position, VectorPart::Z>::ProcessFbxBones(node, time, track, bone.transform, frameInBlockIndex);
-
-					 //VectorSplineHelper<TransformPart::Scale, VectorPart::X>::ProcessFbxBones(node, time, track, bone.transform, frameInBlockIndex);
-					 //VectorSplineHelper<TransformPart::Scale, VectorPart::Y>::ProcessFbxBones(node, time, track, bone.transform, frameInBlockIndex);
-					 //VectorSplineHelper<TransformPart::Scale, VectorPart::Z>::ProcessFbxBones(node, time, track, bone.transform, frameInBlockIndex);
-
-
-					auto posX = VectorSplineHelper<TransformPart::Position, VectorPart::X>::Evaluate(track, bone.transform, frameInBlockIndex);
-					auto posY = VectorSplineHelper<TransformPart::Position, VectorPart::Y>::Evaluate(track, bone.transform, frameInBlockIndex);
-					auto posZ = VectorSplineHelper<TransformPart::Position, VectorPart::Z>::Evaluate(track, bone.transform, frameInBlockIndex);
-
-					auto scaleX = VectorSplineHelper<TransformPart::Scale, VectorPart::X>::Evaluate(track, bone.transform, frameInBlockIndex);
-					auto scaleY = VectorSplineHelper<TransformPart::Scale, VectorPart::Y>::Evaluate(track, bone.transform, frameInBlockIndex);
-					auto scaleZ = VectorSplineHelper<TransformPart::Scale, VectorPart::Z>::Evaluate(track, bone.transform, frameInBlockIndex);
-
-					Matrix4x4 translate;
-					gmtl::setTrans(translate, Vector3(posX, posY, posZ));
-					Matrix4x4 scale;
-					gmtl::setScale(scale, Vector3(scaleX, scaleY, scaleZ));
-
-					Quaternion rotationToSet;
-
-					if (track.HasSplineRotation)
-					{
-						const Hkx::SplineTrackQuaternion& rotationTrack = track.SplineRotation;
-
-						rotationToSet = NurbsHelper<Quaternion, false>::Evaluate(rotationTrack.Degree, frameIndex, rotationTrack.Knots, track.SplineRotation.Channel.Values);
-					}
-					else if (track.HasStaticRotation)
-					{
-						rotationToSet = track.StaticRotation;
-					}
-					else
-					{
-						rotationToSet = bone.transform.Rotation;
-					}
-
-
-					Matrix4x4 rot;
-					gmtl::setRot(rot, rotationToSet);
-
-					Matrix4x4 finalTransform = translate * rot *scale;// * rot;
-
-					FbxMatrix fbxM(
-						finalTransform(0, 0), finalTransform(0, 1), finalTransform(0, 2), finalTransform(0, 3),
-						finalTransform(1, 0), finalTransform(1, 1), finalTransform(1, 2), finalTransform(1, 3),
-						finalTransform(2, 0), finalTransform(2, 1), finalTransform(2, 2), finalTransform(2, 3),
-						finalTransform(3, 0), finalTransform(3, 1), finalTransform(3, 2), finalTransform(3, 3)
-					);
-
-					FbxVector4 translateV, scaleV, rotateV, shearingDummyV;
-					double signDummy;
-					fbxM.Transpose().GetElements(translateV, rotateV, shearingDummyV, scaleV, signDummy);
-
-					node.translation.AddPoint(time, translateV);
-					node.rotation.AddPoint(time, rotateV);
-					node.scale.AddPoint(time, scaleV);
+					std::cout << "frame 1!";
 				}
+
+				const int trackIndex = anim.HkxBoneIndexToTransformTrackMap[boneIndex];
+
+				assert(trackIndex >= 0);
+
+				const Hkx::HkxTrack& track = anim.Tracks[blockIndex][trackIndex];
+
+					//VectorSplineHelper<TransformPart::Position, VectorPart::X>::ProcessFbxBones(node, time, track, bone.transform, frameInBlockIndex);
+					//VectorSplineHelper<TransformPart::Position, VectorPart::Y>::ProcessFbxBones(node, time, track, bone.transform, frameInBlockIndex);
+					//VectorSplineHelper<TransformPart::Position, VectorPart::Z>::ProcessFbxBones(node, time, track, bone.transform, frameInBlockIndex);
+
+					//VectorSplineHelper<TransformPart::Scale, VectorPart::X>::ProcessFbxBones(node, time, track, bone.transform, frameInBlockIndex);
+					//VectorSplineHelper<TransformPart::Scale, VectorPart::Y>::ProcessFbxBones(node, time, track, bone.transform, frameInBlockIndex);
+					//VectorSplineHelper<TransformPart::Scale, VectorPart::Z>::ProcessFbxBones(node, time, track, bone.transform, frameInBlockIndex);
+
+
+				auto posX = VectorSplineHelper<TransformPart::Position, VectorPart::X>::Evaluate(track, bone.transform, frameInBlockIndex);
+				auto posY = VectorSplineHelper<TransformPart::Position, VectorPart::Y>::Evaluate(track, bone.transform, frameInBlockIndex);
+				auto posZ = VectorSplineHelper<TransformPart::Position, VectorPart::Z>::Evaluate(track, bone.transform, frameInBlockIndex);
+
+				auto scaleX = VectorSplineHelper<TransformPart::Scale, VectorPart::X>::Evaluate(track, bone.transform, frameInBlockIndex);
+				auto scaleY = VectorSplineHelper<TransformPart::Scale, VectorPart::Y>::Evaluate(track, bone.transform, frameInBlockIndex);
+				auto scaleZ = VectorSplineHelper<TransformPart::Scale, VectorPart::Z>::Evaluate(track, bone.transform, frameInBlockIndex);
+
+				Matrix4x4 translate;
+				gmtl::setTrans(translate, Vector3(posX, posY, posZ));
+				Matrix4x4 scale;
+				gmtl::setScale(scale, Vector3(scaleX, scaleY, scaleZ));
+
+				Quaternion rotationToSet;
+
+				if (track.HasSplineRotation)
+				{
+					const Hkx::SplineTrackQuaternion& rotationTrack = track.SplineRotation;
+
+					rotationToSet = NurbsHelper<Quaternion, true>::Evaluate(rotationTrack.Degree, frameIndex, rotationTrack.Knots, track.SplineRotation.Channel.Values);
+				}
+				else if (track.HasStaticRotation)
+				{
+					rotationToSet = track.StaticRotation;
+				}
+				else
+				{
+					rotationToSet = bone.transform.Rotation;
+				}
+
+
+				Matrix4x4 rot;
+				gmtl::setRot(rot, rotationToSet);
+
+				Matrix4x4 finalTransform = translate * rot *scale;// * rot;
+
+				gmtl::transpose(finalTransform);
+/*
+				std::cout << "for " << bone.bone.Name << " transform is " <<
+					finalTransform(0, 0) << " " << finalTransform(0, 1) << " " << finalTransform(0, 2) << " " << finalTransform(0, 3) << " " <<
+					finalTransform(1, 0)<< " " << finalTransform(1, 1) << " "<< finalTransform(1, 2) << " "<< finalTransform(1, 3) << " " <<
+					finalTransform(2, 0)<< " " << finalTransform(2, 1) << " "<< finalTransform(2, 2) << " "<< finalTransform(2, 3) << " " <<
+					finalTransform(3, 0)<< " " << finalTransform(3, 1) << " "<< finalTransform(3, 2) << " "<< finalTransform(3, 3) << std::endl;*/
+
+				localBoneTransforms.emplace(boneIndex, finalTransform);
+
+				//FbxMatrix fbxM(
+				//	finalTransform(0, 0), finalTransform(0, 1), finalTransform(0, 2), finalTransform(0, 3),
+				//	finalTransform(1, 0), finalTransform(1, 1), finalTransform(1, 2), finalTransform(1, 3),
+				//	finalTransform(2, 0), finalTransform(2, 1), finalTransform(2, 2), finalTransform(2, 3),
+				//	finalTransform(3, 0), finalTransform(3, 1), finalTransform(3, 2), finalTransform(3, 3)
+				//);
+
+				//FbxVector4 translateV, scaleV, rotateV, shearingDummyV;
+				//double signDummy;
+				//fbxM/*.Transpose()*/.GetElements(translateV, rotateV, shearingDummyV, scaleV, signDummy);
+
+				//node.translation.AddPoint(time, translateV);
+				//node.rotation.AddPoint(time, rotateV);
+				//node.scale.AddPoint(time, scaleV);
+			}
+		
+			std::map<int, Matrix4x4> globalBoneTransforms;
+
+
+			for (std::pair<const int, HkxBone>& bonePair : animBones)
+			{
+				const int boneIndex = bonePair.first;
+				HkxBone& bone = bonePair.second;
+
+				Matrix4x4 globalBoneTransform;
+
+				for (int parentIndex = boneIndex; parentIndex >= 0; parentIndex = animBones[parentIndex].ParentIndex)
+				{
+					globalBoneTransform = globalBoneTransform * localBoneTransforms[parentIndex];
+				}
+
+				globalBoneTransforms.emplace(boneIndex, globalBoneTransform);
+
+
+				if (frameIndex == 0)
+				std::cout << "for " << bone.bone.Name << " transform is " <<
+					globalBoneTransform(0, 0) << " " << globalBoneTransform(0, 1) << " " << globalBoneTransform(0, 2) << " " << globalBoneTransform(0, 3) << " " <<
+					globalBoneTransform(1, 0)<< " " << globalBoneTransform(1, 1) << " "<< globalBoneTransform(1, 2) << " "<< globalBoneTransform(1, 3) << " " <<
+					globalBoneTransform(2, 0)<< " " << globalBoneTransform(2, 1) << " "<< globalBoneTransform(2, 2) << " "<< globalBoneTransform(2, 3) << " " <<
+					globalBoneTransform(3, 0)<< " " << globalBoneTransform(3, 1) << " "<< globalBoneTransform(3, 2) << " "<< globalBoneTransform(3, 3) << std::endl;
+			}
+
+			for (std::pair<const int, HkxBone>& bonePair : animBones)
+			{
+				const int boneIndex = bonePair.first;
+				HkxBone& bone = bonePair.second;
+
+				Matrix4x4 finalBoneTransform = globalBoneTransforms[boneIndex];
+
+				FbxMatrix finalFbxBoneTransform = Convert(finalBoneTransform);// .Transpose();
+
+				if (bone.ParentIndex >= 0)
+				{
+					FbxMatrix parentFbxBoneTransform = Convert(globalBoneTransforms[bone.ParentIndex]);// .Transpose();
+
+					finalFbxBoneTransform = parentFbxBoneTransform.Inverse() * finalFbxBoneTransform;
+				}
+
+
+
+				FbxVector4 translateV, scaleV, rotateV, shearingDummyV;
+				double signDummy;
+				finalFbxBoneTransform/*.Transpose()*/.GetElements(translateV, rotateV, shearingDummyV, scaleV, signDummy);
+
+				FbxAnimNodes& node = nodes.at(boneIndex);
+
+				FbxVector4 translateVgen(frameIndex,0, 0);
+
+				node.translation.AddPoint(time, translateVgen);
+
+				//node.rotation.AddPoint(time, FbxVector4(0, frameIndex, 0));
+				//node.scale.AddPoint(time, FbxVector4(1, 1, 1));
+/*
+				node.translation.AddPoint(time, translateV);
+				node.rotation.AddPoint(time, rotateV);
+				node.scale.AddPoint(time, scaleV);*/
+			}
 		}
 		
 		for (std::pair<const int, FbxAnimNodes>& nnode : nodes)
