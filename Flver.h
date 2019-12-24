@@ -7,6 +7,30 @@ namespace Flver
 {
 	struct FaceSet
 	{
+		enum class FaceSetFlags : unsigned int
+		{
+			/// <summary>
+			/// Just your average everyday face set.
+			/// </summary>
+			None = 0,
+
+			/// <summary>
+			/// Low detail mesh.
+			/// </summary>
+			LodLevel1 = 0x01000000,
+
+			/// <summary>
+			/// Really low detail mesh.
+			/// </summary>
+			LodLevel2 = 0x02000000,
+
+			/// <summary>
+			/// Many meshes have a copy of each faceset with and without this flag. If you remove them, motion blur stops working.
+			/// </summary>
+			MotionBlur = 0x80000000,
+		};
+
+		int Flags;
 		bool TriangleStrip;
 		bool CullBackfaces;
 		std::vector<int> Indices;

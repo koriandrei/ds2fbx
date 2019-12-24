@@ -35,16 +35,49 @@ FbxMesh* exportMesh(FbxScene* scene, const Flver::Mesh& mesh)
 	//fbx->SetControlPointCount(mesh.Vertices.size());
 	fbx->InitControlPoints(mesh.Vertices.size());
 	fbx->InitNormals();
+	
+	FbxGeometryElementUV* uv = fbx->CreateElementUV("Diffuse");
+	FbxGeometryElementTangent* tangents = fbx->CreateElementTangent();
+	FbxGeometryElementBinormal* binormal = fbx->CreateElementBinormal();
+
 	for (int vertexIndex = 0; vertexIndex < mesh.Vertices.size(); ++vertexIndex)
 	{
 		const Flver::Vertex& vertex = mesh.Vertices[vertexIndex];
 		
 		fbx->SetControlPointAt(Convert(vertex.Position), Convert(vertex.Normal), vertexIndex);
+		
+		tangents->GetDirectArray().Add(FbxVector4(vertex.Tangents[0][0], vertex.Tangents[0][1], vertex.Tangents[0][2], vertex.Tangents[0][3]));
+
+		FbxVector4 vertexNormal = Convert(vertex.Normal);
+		vertexNormal.Normalize();
+
+		FbxVector4 vertexBitangent = Convert(vertex.Bitangent);
+		vertexBitangent[3] = 0;
+		vertexBitangent.Normalize();
+		
+		FbxVector4 vertexBinormal = vertexNormal.CrossProduct(vertexBitangent) * vertex.Bitangent[3];
+
+		binormal->GetDirectArray().Add(vertexBinormal);
+
+		if (vertex.UVs.size() > 0)
+		{
+			uv->GetDirectArray().Add(FbxVector2(vertex.UVs[0][0], vertex.UVs[0][1]));
+		}
+		else
+		{
+			uv->GetDirectArray().Add(FbxVector2(0, 0));
+		}
 	}
 
 	for (int faceSetIndex = 0; faceSetIndex < mesh.FaceSets.size(); ++faceSetIndex)
 	{
 		const Flver::FaceSet& faceSet = mesh.FaceSets[faceSetIndex];
+
+		if (faceSet.Flags != (int)Flver::FaceSet::FaceSetFlags::None)
+		{
+			// skip all LODs
+			continue;
+		}
 
 		if (faceSet.Indices.size() % 3 != 0)
 		{
@@ -69,6 +102,7 @@ FbxMesh* exportMesh(FbxScene* scene, const Flver::Mesh& mesh)
 	FbxGeometryConverter Converter(scene->GetFbxManager());
 
 	Converter.ComputeEdgeSmoothingFromNormals(fbx);
+	Converter.ComputePolygonSmoothingFromEdgeSmoothing(fbx);
 
 	return fbx;
 }

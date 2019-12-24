@@ -337,14 +337,14 @@ namespace Hkx
 
 namespace Flver
 {
-	
-
 	inline void from_json(const json& j, FaceSet& val)
 	{
 		JSON_FROM(TriangleStrip);
 		JSON_FROM(CullBackfaces);
 		JSON_FROM(Indices);
+		JSON_FROM(Flags);
 	}
+
 	inline void from_json(const json& j, VertexBoneWeights& val)
 	{
 		JSON_FROM(A);
