@@ -66,6 +66,10 @@ FbxMesh* exportMesh(FbxScene* scene, const Flver::Mesh& mesh)
 
 	fbx->BuildMeshEdgeArray();
 
+	FbxGeometryConverter Converter(scene->GetFbxManager());
+
+	Converter.ComputeEdgeSmoothingFromNormals(fbx);
+
 	return fbx;
 }
 
@@ -574,9 +578,9 @@ struct FbxAnimNodes
 			FbxAnimCurveKey xKey(time, value[0]);
 			curveX->KeyAdd(time, xKey);
 			FbxAnimCurveKey yKey(time, value[1]);
-			curveY->KeyAdd(time, xKey);
+			curveY->KeyAdd(time, yKey);
 			FbxAnimCurveKey zKey(time, value[2]);
-			curveZ->KeyAdd(time, xKey);
+			curveZ->KeyAdd(time, zKey);
 		}
 
 		void Finish()
@@ -1129,16 +1133,17 @@ void ParseAnimations(FbxScene* scene, std::map<int, HkxBone>& animBones)
 
 				FbxAnimNodes& node = nodes.at(boneIndex);
 
-				FbxVector4 translateVgen(frameIndex,0, 0);
+				//FbxVector4 translateVgen(frameIndex,0, 0);
 
-				node.translation.AddPoint(time, translateVgen);
+				//node.translation.AddPoint(time, translateVgen);
+				//node.rotation.AddPoint(time, FbxVector4(0, 0, 0));
 
 				//node.rotation.AddPoint(time, FbxVector4(0, frameIndex, 0));
 				//node.scale.AddPoint(time, FbxVector4(1, 1, 1));
-/*
+
 				node.translation.AddPoint(time, translateV);
 				node.rotation.AddPoint(time, rotateV);
-				node.scale.AddPoint(time, scaleV);*/
+				node.scale.AddPoint(time, scaleV);
 			}
 		}
 		
