@@ -1,7 +1,10 @@
 #pragma once
 #include "Types.h"
+
+#pragma warning(push, 0)
 #include <vector>
 #include <string>
+#pragma warning(pop)
 
 namespace Flver
 {

@@ -1,6 +1,9 @@
 #pragma once
 
+#pragma warning(push, 0)
 #include "json/json.hpp"
+#pragma warning(pop)
+
 #include "Flver.h"
 #include "Types.h"
 

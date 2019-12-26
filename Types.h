@@ -1,5 +1,7 @@
 #pragma once
 
+#pragma warning(push, 0)
+
 #include "gmtl/Vec.h"
 #include "gmtl/Matrix.h"
 
@@ -9,6 +11,7 @@
 #include "gmtl/Generate.h"
 
 #include "gmtl/EulerAngleOps.h"
+#pragma warning(pop)
 
 typedef gmtl::Vec3d Vector3;
 typedef gmtl::Vec3i Vector3I;

@@ -1,10 +1,12 @@
 #pragma once
 
-#include <map>
 #include "Types.h"
 
+#pragma warning(push, 0)
+#include <map>
 #include <string>
 #include <vector>
+#pragma warning(pop)
 
 namespace Hkx
 {

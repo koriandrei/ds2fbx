@@ -2,24 +2,22 @@
 //
 
 #include "pch.h"
+
+#pragma warning(push, 0)
 #include <iostream>
+#include <fstream>
+#include <algorithm>
+#include <cmath>
+#include <optional>
+
+#include <args/args.hxx>
+#include "json/json.hpp"
+#include <fbxsdk.h>
+#pragma warning(pop)
 
 #include "Flver.h"
 
-#include "json/json.hpp"
-
 #include "JsonParser.h"
-
-#include <fstream>
-
-#include <algorithm>
-#include <cmath>
-
-#include "cxx_argp/cxx_argp_parser.h"
-
-#include <fbxsdk.h>
-
-#include <optional>
 
 FbxVector4 Convert(const Vector3& vector)
 {
@@ -1203,18 +1201,38 @@ void ParseAnimations(FbxScene* scene, std::map<int, HkxBone>& animBones, FbxNode
 	}
 }
 
-int main(int argc, const char* argv[])
+int main(int argc, char* argv[])
 {
-	cxx_argp::parser parser;//("DkS3 model to FBX exporter");
+	args::ArgumentParser parser("This is a DS to FBX model converter");
+	args::Flag shouldGenerateSkins(parser, "skin", "Should generate skins", { "skin", 's' });
+	args::Flag shouldGenerateMesh(parser, "mesh", "Should generate mesh", { "mesh", 'm' });
+	args::Flag shouldGenerateBones(parser, "bones", "Should generate bones", { "bones", 'b' });
+	args::Flag shouldExportAnimations(parser, "animations", "Should export animations", {"animations", "anims", 'a'});
+	args::Flag shouldGenerateBindPose(parser, "bindpose", "Should calculate bind pose", {"bindpose", "bpose", "bp"});
+	args::ValueFlag<std::string> fbxExport(parser, "FBX export", "Is exporting required", { "export", 'e' }, "out.fbx");
+	
+	parser.Add(shouldGenerateSkins);
+	parser.Add(shouldExportAnimations);
+	parser.Add(shouldGenerateBindPose);
+	parser.Add(shouldGenerateMesh);
+	parser.Add(shouldGenerateBones);
+	parser.Add(fbxExport);
 
-	if (parser.parse(argc, argv))
+	try
 	{
+		parser.ParseArgs(std::vector<std::string>(argv + 1, argv + argc));
 		std::cout << "Input args parsed" << std::endl;
 	}
-	else
+	catch (args::Error e)
 	{
-		std::cout << "An error occured while parsing args. Exiting..." << std::endl;
-
+		std::cout << "An error occured while parsing args. " << e.what() << " Exiting..." << std::endl;
+		
+		return 1;
+	}
+	const std::vector<args::FlagBase*> flags = parser.GetAllFlags();
+	if (!std::any_of(flags.cbegin(), flags.cend(), [](const args::FlagBase* flag)-> bool { return flag->Matched(); }))
+	{
+		std::cout << "No input flags were passed" << std::endl;
 		return 1;
 	}
 
@@ -1234,63 +1252,89 @@ int main(int argc, const char* argv[])
 
 	FbxManager* manager = FbxManager::Create();
 
-	//FbxMatrix testm(FbxVector4(10, 100, 1000), FbxVector4(), FbxVector4(1, 1, 1));
-
 	FbxScene* scene = FbxScene::Create(manager, "");
 
 	FbxNode* sceneRoot = scene->GetRootNode();
 
 	std::map<int, ParseBone> skeletonBones;
 
-	for (int boneIndex = 0; boneIndex < f.Bones.size(); ++boneIndex)
+	if (shouldGenerateBones)
 	{
-		const Flver::Bone& bone = f.Bones[boneIndex];
+		for (int boneIndex = 0; boneIndex < f.Bones.size(); ++boneIndex)
+		{
+			const Flver::Bone& bone = f.Bones[boneIndex];
 
-		FbxSkeleton* generatedBone = exportBone(scene, bone);
+			FbxSkeleton* generatedBone = exportBone(scene, bone);
 
-		skeletonBones.emplace(boneIndex, Create(scene, generatedBone, bone));
+			skeletonBones.emplace(boneIndex, Create(scene, generatedBone, bone));
 
-		std::cout << "Generated bone #" << boneIndex << " " << bone.Name << std::endl;
+			std::cout << "Generated bone #" << boneIndex << " " << bone.Name << std::endl;
+		}
+	}
+	FbxNode* skeletonRoot = nullptr;
+	
+	if (shouldGenerateBones)
+	{
+		ProcessBoneHierarchy(scene, skeletonBones);
+
+		sceneRoot->AddChild(skeletonRoot);
 	}
 
-	FbxNode* skeletonRoot = ProcessBoneHierarchy(scene, skeletonBones);
-
-	sceneRoot->AddChild(skeletonRoot);
+	if (!shouldGenerateBones)
+	{
+		std::cout << "Skipped bone generation" << std::endl;
+	}
 
 
 	std::map<int, ParseMesh> meshes;
 
-	for (int meshIndex = 0; meshIndex < f.Meshes.size(); ++meshIndex)
+
+	if (shouldGenerateMesh)
 	{
-		const Flver::Mesh& mesh = f.Meshes[meshIndex];
+		for (int meshIndex = 0; meshIndex < f.Meshes.size(); ++meshIndex)
+		{
+			const Flver::Mesh& mesh = f.Meshes[meshIndex];
 
-		//FbxMesh* generatedMesh = ;
+			//FbxMesh* generatedMesh = ;
 
-		ParseMesh meshStruct = exportMesh(scene, mesh); // Create(scene, generatedMesh, mesh);
+			ParseMesh meshStruct = exportMesh(scene, mesh); // Create(scene, generatedMesh, mesh);
 
-		std::string meshName = skeletonBones[meshStruct.raw.DefaultBoneIndex].raw.Name;
+			std::string meshName = skeletonBones[meshStruct.raw.DefaultBoneIndex].raw.Name;
 
-		meshStruct.node->SetName(meshName.c_str());
+			meshStruct.node->SetName(meshName.c_str());
 
-		meshes.emplace(meshIndex, meshStruct);
+			meshes.emplace(meshIndex, meshStruct);
 
-		sceneRoot->AddChild(meshes[meshIndex].node);
+			sceneRoot->AddChild(meshes[meshIndex].node);
 
-		std::cout << "Generated mesh " << meshIndex << std::endl;
+			std::cout << "Generated mesh " << meshIndex << std::endl;
+		}
 	}
-
+	else
+	{
+		std::cout << "Skipped mesh generation" << std::endl;
+	}
 	
 
-	const bool bShouldGenerateSkin = parser.get<bool>("skin");
-
-	if (bShouldGenerateSkin)
+	if (shouldGenerateMesh && shouldGenerateBones && shouldGenerateSkins)
 	{
 		ProcessSkin(scene, skeletonBones, meshes);
 	}
+	else
+	{
+		std::cout << "Skipping skin generation..." << std::endl;
+	}
+	
+	if (shouldGenerateMesh && shouldGenerateBones && shouldGenerateBindPose)
+	{
+		ProcessBindPose(scene, skeletonBones, meshes);
+	}
+	else
+	{
+		std::cout << "Skipping bind pose generation..." << std::endl;
+	}
 
-	ProcessBindPose(scene, skeletonBones, meshes);
-
-	const bool bShouldExportAnimations = false;
+	const bool bShouldExportAnimations = shouldExportAnimations.Get();;
 
 	if (bShouldExportAnimations)
 	{
@@ -1306,13 +1350,13 @@ int main(int argc, const char* argv[])
 	FbxAxisSystem axis(FbxAxisSystem::EUpVector::eYAxis, FbxAxisSystem::EFrontVector::eParityOdd, FbxAxisSystem::ECoordSystem::eLeftHanded);
 	axis.ConvertScene(scene);
 
-	const bool bShouldExport = false;
-
-	if (bShouldExport)
+	if (fbxExport)
 	{
 		FbxExporter* ex = FbxExporter::Create(manager, "");
 
-		ex->Initialize("out.fbx");
+		std::string exportPath = fbxExport.Get();
+
+		ex->Initialize(exportPath.c_str());
 
 		const bool bDidExport = ex->Export(scene);
 
