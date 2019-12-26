@@ -77,8 +77,8 @@ namespace Hkx
 	
 	inline Vector3 ParseStringVector(std::string vector_string)
 	{
-		int first_comma = vector_string.find(',');
-		int second_comma = vector_string.find(',', first_comma + 1);
+		size_t first_comma = vector_string.find(',');
+		size_t second_comma = vector_string.find(',', first_comma + 1);
 		std::string v1 = vector_string.substr(0, first_comma);
 		std::string v2 = vector_string.substr(first_comma + 1, second_comma - first_comma - 1);
 		std::string v3 = vector_string.substr(second_comma + 1);

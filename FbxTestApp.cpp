@@ -74,7 +74,12 @@ ParseMesh exportMesh(FbxScene* scene, const Flver::Mesh& mesh)
 	{
 		const Flver::Vertex& vertex = mesh.Vertices[vertexIndex];
 		
-		fbx->SetControlPointAt(Convert(vertex.Position), -Convert(vertex.Normal), vertexIndex);
+		// models appear with flipped normals if input vector is used
+		// swapping X and Z seems to do the trick
+		Vector3 position = vertex.Position;
+		position[2] = -position[2];
+
+		fbx->SetControlPointAt(Convert(position), Convert(vertex.Normal), vertexIndex);
 		
 		tangents->GetDirectArray().Add(FbxVector4(vertex.Tangents[0][0], vertex.Tangents[0][1], vertex.Tangents[0][2], vertex.Tangents[0][3]));
 
@@ -227,14 +232,12 @@ void RecurseDeep(ParseBone& currentBone, std::map<int, ParseBone>& allBones)
 		RecurseDeep(childBone, allBones);
 	}
 }
-#pragma optimize ("",off)
+
 FbxMatrix GetWorldTransform(const ParseBone& bone, const std::map<int, ParseBone>& allBones)
 {
 	ParseBone currentBone = bone;
 
 	Matrix4x4 Result;
-
-	//Result.SetIdentity();
 
 	do
 	{
@@ -268,62 +271,14 @@ FbxMatrix GetWorldTransform(const ParseBone& bone, const std::map<int, ParseBone
 			translateM,
 		};
 
-
-		//const FbxMatrix matrices[] = { 
-		//	FbxMatrix(Empty, Empty, scale),
-		//	FbxMatrix(Empty, FbxVector4(euler[0], 0, 0), NoneScale),//.Transpose() ,
-		//	FbxMatrix(Empty, FbxVector4(0, 0, euler[2]), NoneScale),//.Transpose() ,
-		//	FbxMatrix(Empty, FbxVector4(0, euler[1], 0), NoneScale),//.Transpose() ,
-		//	FbxMatrix(translation, Empty, NoneScale),
-		//};
-
-		//FbxMatrix localTransformation;
-		//localTransformation.SetIdentity();
-
-		
-
-		//Matrix4x4 scaleRes = Result * scaleM;
-		//Matrix4x4 rotXRes = scaleRes * rotXM;
-		//Matrix4x4 rotZRes = rotXRes * rotZM;
-
 		Matrix4x4 scaleRes = scaleM * Result;
 		Matrix4x4 rotXRes = rotXM* scaleRes;
 		Matrix4x4 rotZRes = rotZM* rotXRes;
 
-
-		if (bone.raw.Name == "Spine1" && currentBone.raw.Name == "Spine")
-		{
-			//Matrix4x4 transposedZ = rotZRes;
-
-			//gmtl::transpose(transposedZ);
-
-			//Matrix4x4 transposedRotZRes = rotXRes * transposedZ;
-
-
-			std::cout << "row 0 col 3 " << rotZRes(0, 3) << " before Z ROT:  " << rotXRes[0][3] << std::endl;
-			std::cout << "row 3 col 0 " << rotZRes(3, 0) << " before Z ROT:  " << rotXRes[3][0] << std::endl;
-			
-			std::cout << "row 1 col 3 " << rotZRes(1, 3) << " before Z ROT:  " << rotXRes[1][3] << std::endl;
-			std::cout << "row 3 col 1 " << rotZRes(3, 1) << " before Z ROT:  " << rotXRes[3][1] << std::endl;
-		}
-
-		//Matrix4x4 rotYRes = rotZRes * rotYM;
-		//Matrix4x4 transRes = rotYRes * translateM;
 		Matrix4x4 rotYRes = rotYM* rotZRes ;
 		Matrix4x4 transRes = translateM* rotYRes ;
 
 		Result = transRes;
-
-
-		//for (const Matrix4x4 matrix : matrices)
-		//{
-		//	//printf("Busy working on matrix... %f %f %f %f\r\n", Result[3][0], Result[3][1], Result[3][2], Result[3][3]);
-		//	Matrix4x4 temp = Result * matrix;
-		//	Result = temp;
-		//	//localTransformation *= matrix;
-		//}
-
-		//Result = localTransformation * Result;
 
 		if (currentBone.raw.ParentIndex < 0)
 		{
@@ -334,23 +289,6 @@ FbxMatrix GetWorldTransform(const ParseBone& bone, const std::map<int, ParseBone
 		currentBone = allBones.at(currentBone.raw.ParentIndex);
 	} while (true);
 
-	auto& boneMatrix = Result;
-	//const FbxDouble4 LastRow = boneMatrix[3];
-
-	//boneMatrix[0][3] = LastRow[0];
-	//boneMatrix[1][3] = LastRow[1];
-	//boneMatrix[2][3] = LastRow[2];
-
-	using std::swap;
-
-	//swap(boneMatrix[0][3], boneMatrix[3][0]);
-	//swap(boneMatrix[1][3], boneMatrix[3][1]);
-	//swap(boneMatrix[2][3], boneMatrix[3][2]);
-
-	//boneMatrix[3][0] = 0;
-	//boneMatrix[3][1] = 0;
-	//boneMatrix[3][2] = 0;
-
 	return FbxMatrix(
 		Result[0][0], Result[0][1], Result[0][2], Result[0][3],
 		Result[1][0], Result[1][1], Result[1][2], Result[1][3],
@@ -360,7 +298,7 @@ FbxMatrix GetWorldTransform(const ParseBone& bone, const std::map<int, ParseBone
 
 	//return Result;
 }
-#pragma optimize ("", on)
+
 FbxNode* ProcessBoneHierarchy(FbxScene* scene, std::map<int, ParseBone>& skeletonBones)
 {
 	FbxNode* SkeletonRootNode = FbxNode::Create(scene, "ActualRoot_Node");
@@ -399,6 +337,8 @@ FbxNode* ProcessBoneHierarchy(FbxScene* scene, std::map<int, ParseBone>& skeleto
 		double signDummy;
 		
 		boneMatrix.GetElements(Location, Rotation, ShearingDummy, Scale, signDummy);
+		
+		Location[0] = Location[0];
 
 		bone.node->LclTranslation.Set(Location);
 		bone.node->LclRotation.Set(Rotation);
@@ -506,7 +446,7 @@ void ProcessSkin(FbxScene* scene, std::map<int, ParseBone>& skeletonBones, std::
 	}
 }
 
-void ProcessBindPose(FbxScene* scene, std::map<int, ParseBone>& skeletonBones, std::map<int, ParseMesh>& meshes)
+void ProcessBindPose(FbxScene* scene, std::map<int, ParseBone>& skeletonBones)
 {
 	std::cout << "Generating bind poses..." << std::endl;
 
@@ -535,7 +475,7 @@ void ProcessBindPose(FbxScene* scene, std::map<int, ParseBone>& skeletonBones, s
 	}
 }
 
-std::map<int, HkxBone> PrepareAnimBones(FbxScene* scene, std::map<int, ParseBone>& bones)
+std::map<int, HkxBone> PrepareAnimBones(std::map<int, ParseBone>& bones)
 {
 	std::cout << "Reading hkx skel..." << std::endl;
 
@@ -591,8 +531,6 @@ struct FbxAnimNodes
 	{
 		FbxAnimNodeCurve(FbxAnimLayer* animLayer, FbxPropertyT<FbxDouble3>& in_node) : node(in_node.GetCurveNode(animLayer))
 		{
-			std::cout << "Beginning key edition..." << std::endl;
-
 			curveX = in_node.GetCurve(animLayer, FBXSDK_CURVENODE_COMPONENT_X, /*pCreate =*/ true);
 			assert(curveX != nullptr);
 			curveY = in_node.GetCurve(animLayer, FBXSDK_CURVENODE_COMPONENT_Y, /*pCreate =*/ true);
@@ -617,8 +555,6 @@ struct FbxAnimNodes
 
 		void Finish()
 		{
-			std::cout << "Finishing key edition..." << std::endl;
-
 			if (curveX != nullptr)
 			{
 				curveX->KeyModifyEnd();
@@ -837,7 +773,7 @@ struct NurbsHelper
 
 	static T Evaluate(int knotSpan, int degree, float frame, const std::vector<uint8>& knots, const std::vector<T>& controlPoints)
 	{
-		const int controlPointsCount = controlPoints.size();
+		const size_t controlPointsCount = controlPoints.size();
 
 		if (controlPointsCount == 1)
 		{
@@ -948,7 +884,7 @@ FbxMatrix Convert(const Matrix4x4& matrix)
 }
 
 
-void ParseAnimations(FbxScene* scene, std::map<int, HkxBone>& animBones, FbxNode* rootBone)
+void ParseAnimations(FbxScene* scene, std::map<int, HkxBone>& animBones, const std::vector<std::string>& animationNames, FbxNode* rootBone)
 {
 	std::cout << "Reading hkx animations..." << std::endl;
 
@@ -960,29 +896,30 @@ void ParseAnimations(FbxScene* scene, std::map<int, HkxBone>& animBones, FbxNode
 
 	std::cout << "Read hkx anims." << std::endl;
 
-	//Hkx::File animFile;
-
 	std::map<std::string, Hkx::HkxAnim> animFile;
 
-	parsed.get_to(animFile);
+
+	if (animationNames.size() > 0)
+	{
+		for (const std::string& animName : animationNames)
+		{
+			animFile.emplace(animName, parsed.at(animName).get<Hkx::HkxAnim>());
+		}
+	}
+	else
+	{
+		parsed.get_to(animFile);
+		std::cout << "Will export all " << animFile.size() << " animations" << std::endl;
+	}
 
 	Hkx::HkxAnim anim11;
 
 	std::cout << "Parsed hkx anims." << std::endl;
 
 	
-
-	int index = 0;
-	//const int exportAnimsCount = 1000;
-
 	for (const std::pair<std::string, Hkx::HkxAnim>& animPair : animFile)
 	{
-	/*	if (++index > exportAnimsCount)
-		{
-			continue;
-		}
-
-	*/	const std::string& animName = animPair.first;
+		const std::string& animName = animPair.first;
 		const Hkx::HkxAnim& anim = animPair.second;
 
 		std::cout << "Exporting animation " << animName << std::endl;
@@ -1073,6 +1010,9 @@ void ParseAnimations(FbxScene* scene, std::map<int, HkxBone>& animBones, FbxNode
 					const Hkx::SplineTrackQuaternion& rotationTrack = track.SplineRotation;
 
 					rotationToSet = NurbsHelper<Quaternion, true>::Evaluate(rotationTrack.Degree, frameIndex, rotationTrack.Knots, track.SplineRotation.Channel.Values);
+					//Quaternion rotY;
+					//gmtl::set(rotY, gmtl::EulerAngleXYZd(0, 3.14, 0));
+					//rotationToSet *= rotY;
 				}
 				else if (track.HasStaticRotation)
 				{
@@ -1121,7 +1061,6 @@ void ParseAnimations(FbxScene* scene, std::map<int, HkxBone>& animBones, FbxNode
 			for (std::pair<const int, HkxBone>& bonePair : animBones)
 			{
 				const int boneIndex = bonePair.first;
-				HkxBone& bone = bonePair.second;
 
 				Matrix4x4 globalBoneTransform;
 
@@ -1129,6 +1068,21 @@ void ParseAnimations(FbxScene* scene, std::map<int, HkxBone>& animBones, FbxNode
 				{
 					globalBoneTransform = globalBoneTransform * localBoneTransforms[parentIndex];
 				}
+
+				Matrix4x4 rotateY;
+
+				gmtl::set(rotateY, gmtl::EulerAngleXYZd(0, 3.14, 0));
+
+				globalBoneTransform = rotateY * globalBoneTransform;
+
+				Vector3 globalBoneTranslation;
+				gmtl::setTrans(globalBoneTranslation, globalBoneTransform);
+
+				globalBoneTranslation[0] = -globalBoneTranslation[0];
+
+				gmtl::setTrans(globalBoneTransform, globalBoneTranslation);
+
+				
 
 				globalBoneTransforms.emplace(boneIndex, globalBoneTransform);
 
@@ -1208,6 +1162,7 @@ int main(int argc, char* argv[])
 	args::Flag shouldGenerateMesh(parser, "mesh", "Should generate mesh", { "mesh", 'm' });
 	args::Flag shouldGenerateBones(parser, "bones", "Should generate bones", { "bones", 'b' });
 	args::Flag shouldExportAnimations(parser, "animations", "Should export animations", {"animations", "anims", 'a'});
+	args::ValueFlagList<std::string> animationNames(parser, "animation list", "Which animations to export?", {"animlist", "al"});
 	args::Flag shouldGenerateBindPose(parser, "bindpose", "Should calculate bind pose", {"bindpose", "bpose", "bp"});
 	args::ValueFlag<std::string> fbxExport(parser, "FBX export", "Is exporting required", { "export", 'e' }, "out.fbx");
 	
@@ -1216,6 +1171,7 @@ int main(int argc, char* argv[])
 	parser.Add(shouldGenerateBindPose);
 	parser.Add(shouldGenerateMesh);
 	parser.Add(shouldGenerateBones);
+	parser.Add(animationNames);
 	parser.Add(fbxExport);
 
 	try
@@ -1229,6 +1185,7 @@ int main(int argc, char* argv[])
 		
 		return 1;
 	}
+
 	const std::vector<args::FlagBase*> flags = parser.GetAllFlags();
 	if (!std::any_of(flags.cbegin(), flags.cend(), [](const args::FlagBase* flag)-> bool { return flag->Matched(); }))
 	{
@@ -1254,6 +1211,12 @@ int main(int argc, char* argv[])
 
 	FbxScene* scene = FbxScene::Create(manager, "");
 
+
+	//// set DkS coordinate system
+	//FbxAxisSystem::DirectX.ConvertScene(scene);
+
+	//FbxSystemUnit::m.ConvertScene(scene);
+
 	FbxNode* sceneRoot = scene->GetRootNode();
 
 	std::map<int, ParseBone> skeletonBones;
@@ -1275,7 +1238,7 @@ int main(int argc, char* argv[])
 	
 	if (shouldGenerateBones)
 	{
-		ProcessBoneHierarchy(scene, skeletonBones);
+		skeletonRoot = ProcessBoneHierarchy(scene, skeletonBones);
 
 		sceneRoot->AddChild(skeletonRoot);
 	}
@@ -1325,30 +1288,28 @@ int main(int argc, char* argv[])
 		std::cout << "Skipping skin generation..." << std::endl;
 	}
 	
-	if (shouldGenerateMesh && shouldGenerateBones && shouldGenerateBindPose)
+	if (shouldGenerateBones && shouldGenerateBindPose)
 	{
-		ProcessBindPose(scene, skeletonBones, meshes);
+		ProcessBindPose(scene, skeletonBones);
 	}
 	else
 	{
 		std::cout << "Skipping bind pose generation..." << std::endl;
 	}
 
-	const bool bShouldExportAnimations = shouldExportAnimations.Get();;
-
-	if (bShouldExportAnimations)
+	if (shouldExportAnimations.Get() || animationNames.Matched())
 	{
-		std::map<int, HkxBone> animBones = PrepareAnimBones(scene, skeletonBones);
+		std::map<int, HkxBone> animBones = PrepareAnimBones(skeletonBones);
 
-		ParseAnimations(scene, animBones, skeletonRoot);
+		ParseAnimations(scene, animBones, animationNames.Get(), skeletonRoot);
 	}
 	else
 	{
 		std::cout << "Animation export skipped." << std::endl;
 	}
-
-	FbxAxisSystem axis(FbxAxisSystem::EUpVector::eYAxis, FbxAxisSystem::EFrontVector::eParityOdd, FbxAxisSystem::ECoordSystem::eLeftHanded);
-	axis.ConvertScene(scene);
+/*
+	FbxAxisSystem axis(FbxAxisSystem::EPreDefinedAxisSystem::eDirectX);
+	axis.ConvertScene(scene);*/
 
 	if (fbxExport)
 	{
