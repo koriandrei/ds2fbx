@@ -77,8 +77,8 @@
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <LinkIncremental>true</LinkIncremental>
-    <IncludePath>G:\work\FbxTestApp\inc;G:\Program Files\Autodesk\FBX\FBX SDK\2019.0\include;$(IncludePath)</IncludePath>
-    <LibraryPath>G:\Program Files\Autodesk\FBX\FBX SDK\2019.0\lib\vs2012\x64\debug;$(LibraryPath)</LibraryPath>
+    <IncludePath>G:\work\FbxTestApp\third-party;G:\Program Files\Autodesk\FBX\FBX SDK\2019.0\include;$(IncludePath)</IncludePath>
+    <LibraryPath>G:\Program Files\Autodesk\FBX\FBX SDK\2019.0\lib\vs2012\x64\release;$(LibraryPath)</LibraryPath>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
     <LinkIncremental>false</LinkIncremental>
@@ -107,8 +107,8 @@
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <ClCompile>
-      <PrecompiledHeader>Use</PrecompiledHeader>
-      <WarningLevel>Level3</WarningLevel>
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+      <WarningLevel>EnableAllWarnings</WarningLevel>
       <Optimization>MaxSpeed</Optimization>
       <SDLCheck>true</SDLCheck>
       <PreprocessorDefinitions>FBXSDK_SHARED;_DEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
@@ -116,6 +116,8 @@
       <PrecompiledHeaderFile>pch.h</PrecompiledHeaderFile>
       <BasicRuntimeChecks>Default</BasicRuntimeChecks>
       <LanguageStandard>stdcpp17</LanguageStandard>
+      <IntrinsicFunctions>true</IntrinsicFunctions>
+      <FavorSizeOrSpeed>Speed</FavorSizeOrSpeed>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>

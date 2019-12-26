@@ -14,6 +14,9 @@
 
 #include <algorithm>
 #include <cmath>
+
+#include "cxx_argp/cxx_argp_parser.h"
+
 #include <fbxsdk.h>
 
 #include <optional>
@@ -28,110 +31,6 @@ FbxVector4 Convert(const Vector4& vector)
 	return FbxVector4(vector[0], vector[1], vector[2], vector[3]);
 }
 
-FbxMesh* exportMesh(FbxScene* scene, const Flver::Mesh& mesh)
-{
-	FbxMesh* fbx = FbxMesh::Create(scene, "");
-
-	//fbx->SetControlPointCount(mesh.Vertices.size());
-	fbx->InitControlPoints(mesh.Vertices.size());
-	fbx->InitNormals();
-	
-	FbxGeometryElementUV* uv = fbx->CreateElementUV("Diffuse");
-	FbxGeometryElementTangent* tangents = fbx->CreateElementTangent();
-	FbxGeometryElementBinormal* binormal = fbx->CreateElementBinormal();
-
-	for (int vertexIndex = 0; vertexIndex < mesh.Vertices.size(); ++vertexIndex)
-	{
-		const Flver::Vertex& vertex = mesh.Vertices[vertexIndex];
-		
-		fbx->SetControlPointAt(Convert(vertex.Position), Convert(vertex.Normal), vertexIndex);
-		
-		tangents->GetDirectArray().Add(FbxVector4(vertex.Tangents[0][0], vertex.Tangents[0][1], vertex.Tangents[0][2], vertex.Tangents[0][3]));
-
-		FbxVector4 vertexNormal = Convert(vertex.Normal);
-		vertexNormal.Normalize();
-
-		FbxVector4 vertexBitangent = Convert(vertex.Bitangent);
-		vertexBitangent[3] = 0;
-		vertexBitangent.Normalize();
-		
-		FbxVector4 vertexBinormal = vertexNormal.CrossProduct(vertexBitangent) * vertex.Bitangent[3];
-
-		binormal->GetDirectArray().Add(vertexBinormal);
-
-		if (vertex.UVs.size() > 0)
-		{
-			uv->GetDirectArray().Add(FbxVector2(vertex.UVs[0][0], vertex.UVs[0][1]));
-		}
-		else
-		{
-			uv->GetDirectArray().Add(FbxVector2(0, 0));
-		}
-	}
-
-	for (int faceSetIndex = 0; faceSetIndex < mesh.FaceSets.size(); ++faceSetIndex)
-	{
-		const Flver::FaceSet& faceSet = mesh.FaceSets[faceSetIndex];
-
-		if (faceSet.Flags != (int)Flver::FaceSet::FaceSetFlags::None)
-		{
-			// skip all LODs
-			continue;
-		}
-
-		if (faceSet.Indices.size() % 3 != 0)
-		{
-			abort();
-			return nullptr;
-		}
-
-		for (int triangleStartIndex = 0; triangleStartIndex < faceSet.Indices.size(); triangleStartIndex+=3)
-		{
-			fbx->BeginPolygon();
-
-			fbx->AddPolygon(faceSet.Indices[triangleStartIndex]);
-			fbx->AddPolygon(faceSet.Indices[triangleStartIndex + 1]);
-			fbx->AddPolygon(faceSet.Indices[triangleStartIndex + 2]);
-
-			fbx->EndPolygon();
-		}
-	}
-
-	fbx->BuildMeshEdgeArray();
-
-	FbxGeometryConverter Converter(scene->GetFbxManager());
-
-	Converter.ComputeEdgeSmoothingFromNormals(fbx);
-	Converter.ComputePolygonSmoothingFromEdgeSmoothing(fbx);
-
-	return fbx;
-}
-
-static FbxSkeleton* exportBone(FbxScene* scene, const Flver::Bone& bone)
-{
-	FbxSkeleton* fbx = FbxSkeleton::Create(scene, (bone.Name + "_Bone").c_str());
-/*
-	if (bone.ParentIndex < 0)
-	{
-		fbx->SetSkeletonType(FbxSkeleton::EType::eRoot);
-	}
-	else */if (bone.ChildIndex < 0)
-	{
-		fbx->SetSkeletonType(FbxSkeleton::EType::eEffector);
-	}
-	else
-	{
-		fbx->SetSkeletonType(FbxSkeleton::EType::eLimb);
-	}
-
-	return fbx;
-}
-
-
-//FbxSkeleton* exportSkeleton(const Flver::Skeleton& skeleton)
-//{
-//
-//}
 
 template <class TFbx, class TRaw>
 struct TFbxNodeHelper
@@ -159,6 +58,107 @@ static TFbxNodeHelper<TFbx, TRaw> Create(FbxScene* scene, TFbx* object, const TR
 
 typedef TFbxNodeHelper<FbxSkeleton, Flver::Bone> ParseBone;
 typedef TFbxNodeHelper<FbxMesh, Flver::Mesh> ParseMesh;
+
+
+ParseMesh exportMesh(FbxScene* scene, const Flver::Mesh& mesh)
+{
+	FbxMesh* fbx = FbxMesh::Create(scene, "");
+
+	//fbx->SetControlPointCount(mesh.Vertices.size());
+	fbx->InitControlPoints(mesh.Vertices.size());
+	fbx->InitNormals();
+	
+	FbxGeometryElementUV* uv = fbx->CreateElementUV("Diffuse");
+	FbxGeometryElementTangent* tangents = fbx->CreateElementTangent();
+	FbxGeometryElementBinormal* binormal = fbx->CreateElementBinormal();
+
+	for (int vertexIndex = 0; vertexIndex < mesh.Vertices.size(); ++vertexIndex)
+	{
+		const Flver::Vertex& vertex = mesh.Vertices[vertexIndex];
+		
+		fbx->SetControlPointAt(Convert(vertex.Position), -Convert(vertex.Normal), vertexIndex);
+		
+		tangents->GetDirectArray().Add(FbxVector4(vertex.Tangents[0][0], vertex.Tangents[0][1], vertex.Tangents[0][2], vertex.Tangents[0][3]));
+
+		FbxVector4 vertexNormal = Convert(vertex.Normal);
+		vertexNormal.Normalize();
+
+		FbxVector4 vertexBitangent = Convert(vertex.Bitangent);
+		vertexBitangent[3] = 0;
+		vertexBitangent.Normalize();
+		
+		FbxVector4 vertexBinormal = vertexNormal.CrossProduct(vertexBitangent) * vertex.Bitangent[3];
+
+		binormal->GetDirectArray().Add(vertexBinormal);
+
+		if (vertex.UVs.size() > 0)
+		{
+			uv->GetDirectArray().Add(FbxVector2(vertex.UVs[0][0], vertex.UVs[0][1]));
+		}
+		else
+		{
+			uv->GetDirectArray().Add(FbxVector2(0, 0));
+		}
+	}
+
+	FbxNode* node = FbxNode::Create(scene, "");
+	node->SetNodeAttribute(fbx);
+
+	for (int faceSetIndex = 0; faceSetIndex < mesh.FaceSets.size(); ++faceSetIndex)
+	{
+		const Flver::FaceSet& faceSet = mesh.FaceSets[faceSetIndex];
+
+		if (faceSet.Flags != (int)Flver::FaceSet::FaceSetFlags::None)
+		{
+			// skip all LODs
+			continue;
+		}
+
+		node->mCullingType = faceSet.CullBackfaces ? FbxNode::eCullingOnCCW : FbxNode::eCullingOff;
+
+		assert(faceSet.Indices.size() % 3 == 0);
+
+		for (int triangleStartIndex = 0; triangleStartIndex < faceSet.Indices.size(); triangleStartIndex+=3)
+		{
+			fbx->BeginPolygon();
+
+			fbx->AddPolygon(faceSet.Indices[triangleStartIndex]);
+			fbx->AddPolygon(faceSet.Indices[triangleStartIndex + 1]);
+			fbx->AddPolygon(faceSet.Indices[triangleStartIndex + 2]);
+
+			fbx->EndPolygon();
+		}
+	}
+
+	fbx->BuildMeshEdgeArray();
+
+	FbxGeometryConverter Converter(scene->GetFbxManager());
+
+	Converter.ComputeEdgeSmoothingFromNormals(fbx);
+	Converter.ComputePolygonSmoothingFromEdgeSmoothing(fbx);
+
+	return ParseMesh(fbx, node, mesh);
+}
+
+static FbxSkeleton* exportBone(FbxScene* scene, const Flver::Bone& bone)
+{
+	FbxSkeleton* fbx = FbxSkeleton::Create(scene, (bone.Name + "_Bone").c_str());
+/*
+	if (bone.ParentIndex < 0)
+	{
+		fbx->SetSkeletonType(FbxSkeleton::EType::eRoot);
+	}
+	else */if (bone.ChildIndex < 0)
+	{
+		fbx->SetSkeletonType(FbxSkeleton::EType::eEffector);
+	}
+	else
+	{
+		fbx->SetSkeletonType(FbxSkeleton::EType::eLimb);
+	}
+
+	return fbx;
+}
 
 struct HkxBone
 {
@@ -950,7 +950,7 @@ FbxMatrix Convert(const Matrix4x4& matrix)
 }
 
 
-void ParseAnimations(FbxScene* scene, std::map<int, HkxBone>& animBones)
+void ParseAnimations(FbxScene* scene, std::map<int, HkxBone>& animBones, FbxNode* rootBone)
 {
 	std::cout << "Reading hkx animations..." << std::endl;
 
@@ -966,40 +966,34 @@ void ParseAnimations(FbxScene* scene, std::map<int, HkxBone>& animBones)
 
 	std::map<std::string, Hkx::HkxAnim> animFile;
 
-	//parsed.get_to(animFile);
+	parsed.get_to(animFile);
 
 	Hkx::HkxAnim anim11;
-
-	parsed.at("a000_000020.hkx").get_to(anim11);
-
-	animFile.emplace("a000_000020.hkx", anim11);
 
 	std::cout << "Parsed hkx anims." << std::endl;
 
 	
 
 	int index = 0;
-	const int exportAnimsCount = 10;
+	//const int exportAnimsCount = 1000;
 
 	for (const std::pair<std::string, Hkx::HkxAnim>& animPair : animFile)
 	{
-		if (++index > exportAnimsCount)
+	/*	if (++index > exportAnimsCount)
 		{
 			continue;
 		}
 
-		const std::string& animName = animPair.first;
+	*/	const std::string& animName = animPair.first;
 		const Hkx::HkxAnim& anim = animPair.second;
 
 		std::cout << "Exporting animation " << animName << std::endl;
-
 
 		FbxAnimStack* animStack = FbxAnimStack::Create(scene, animName.c_str());
 
 		FbxAnimLayer* animLayer = FbxAnimLayer::Create(animStack, "Layer0");
 
 		animStack->AddMember(animLayer);
-
 
 		std::map<int, FbxAnimNodes> nodes;
 
@@ -1015,6 +1009,12 @@ void ParseAnimations(FbxScene* scene, std::map<int, HkxBone>& animBones)
 			nodes.emplace(boneIndex, FbxAnimNodes(animLayer, bone.node->LclTranslation, bone.node->LclRotation, bone.node->LclScaling));
 		}
 
+		rootBone->LclTranslation.GetCurveNode(animLayer, true);
+		rootBone->LclRotation.GetCurveNode(animLayer, true);
+		rootBone->LclScaling.GetCurveNode(animLayer, true);
+
+		FbxAnimNodes rootAnimNode(animLayer, rootBone->LclTranslation, rootBone->LclRotation, rootBone->LclScaling);
+
 		for (int frameIndex = 0; frameIndex < anim.FrameCount; ++frameIndex)
 		{
 			FbxTime time;
@@ -1024,7 +1024,7 @@ void ParseAnimations(FbxScene* scene, std::map<int, HkxBone>& animBones)
 
 			const int blockIndex = static_cast<int>(std::floor(((double)(frameInBlockIndex)) / anim.NumFramesPerBlock));
 
-			std::cout << "time is " << frameIndex << std::endl;
+			//std::cout << "time is " << frameIndex << std::endl;
 
 			std::map<int, Matrix4x4> localBoneTransforms;
 
@@ -1037,7 +1037,7 @@ void ParseAnimations(FbxScene* scene, std::map<int, HkxBone>& animBones)
 
 				if (frameIndex == 1)
 				{
-					std::cout << "frame 1!";
+					//std::cout << "frame 1!";
 				}
 
 				const int trackIndex = anim.HkxBoneIndexToTransformTrackMap[boneIndex];
@@ -1135,12 +1135,12 @@ void ParseAnimations(FbxScene* scene, std::map<int, HkxBone>& animBones)
 				globalBoneTransforms.emplace(boneIndex, globalBoneTransform);
 
 
-				if (frameIndex == 0)
-				std::cout << "for " << bone.bone.Name << " transform is " <<
-					globalBoneTransform(0, 0) << " " << globalBoneTransform(0, 1) << " " << globalBoneTransform(0, 2) << " " << globalBoneTransform(0, 3) << " " <<
-					globalBoneTransform(1, 0)<< " " << globalBoneTransform(1, 1) << " "<< globalBoneTransform(1, 2) << " "<< globalBoneTransform(1, 3) << " " <<
-					globalBoneTransform(2, 0)<< " " << globalBoneTransform(2, 1) << " "<< globalBoneTransform(2, 2) << " "<< globalBoneTransform(2, 3) << " " <<
-					globalBoneTransform(3, 0)<< " " << globalBoneTransform(3, 1) << " "<< globalBoneTransform(3, 2) << " "<< globalBoneTransform(3, 3) << std::endl;
+				//if (frameIndex == 0)
+				//std::cout << "for " << bone.bone.Name << " transform is " <<
+				//	globalBoneTransform(0, 0) << " " << globalBoneTransform(0, 1) << " " << globalBoneTransform(0, 2) << " " << globalBoneTransform(0, 3) << " " <<
+				//	globalBoneTransform(1, 0)<< " " << globalBoneTransform(1, 1) << " "<< globalBoneTransform(1, 2) << " "<< globalBoneTransform(1, 3) << " " <<
+				//	globalBoneTransform(2, 0)<< " " << globalBoneTransform(2, 1) << " "<< globalBoneTransform(2, 2) << " "<< globalBoneTransform(2, 3) << " " <<
+				//	globalBoneTransform(3, 0)<< " " << globalBoneTransform(3, 1) << " "<< globalBoneTransform(3, 2) << " "<< globalBoneTransform(3, 3) << std::endl;
 			}
 
 			for (std::pair<const int, HkxBone>& bonePair : animBones)
@@ -1178,6 +1178,13 @@ void ParseAnimations(FbxScene* scene, std::map<int, HkxBone>& animBones)
 				node.translation.AddPoint(time, translateV);
 				node.rotation.AddPoint(time, rotateV);
 				node.scale.AddPoint(time, scaleV);
+
+				if (bone.bone.Name == "Root")
+				{
+					rootAnimNode.translation.AddPoint(time, translateV);
+					rootAnimNode.rotation.AddPoint(time, rotateV);
+					rootAnimNode.scale.AddPoint(time, scaleV);
+				}
 			}
 		}
 		
@@ -1188,12 +1195,29 @@ void ParseAnimations(FbxScene* scene, std::map<int, HkxBone>& animBones)
 			nnode.second.scale.Finish();
 		}
 
+		rootAnimNode.translation.Finish();
+		rootAnimNode.rotation.Finish();
+		rootAnimNode.scale.Finish();
+
 		std::cout << "Exported!" << std::endl << std::endl;
 	}
 }
 
-int main()
+int main(int argc, const char* argv[])
 {
+	cxx_argp::parser parser;//("DkS3 model to FBX exporter");
+
+	if (parser.parse(argc, argv))
+	{
+		std::cout << "Input args parsed" << std::endl;
+	}
+	else
+	{
+		std::cout << "An error occured while parsing args. Exiting..." << std::endl;
+
+		return 1;
+	}
+
 	std::cout << "Reading flver..." << std::endl;
 	nlohmann::json parsed;
 	{
@@ -1240,9 +1264,9 @@ int main()
 	{
 		const Flver::Mesh& mesh = f.Meshes[meshIndex];
 
-		FbxMesh* generatedMesh = exportMesh(scene, mesh);
+		//FbxMesh* generatedMesh = ;
 
-		ParseMesh meshStruct = Create(scene, generatedMesh, mesh);
+		ParseMesh meshStruct = exportMesh(scene, mesh); // Create(scene, generatedMesh, mesh);
 
 		std::string meshName = skeletonBones[meshStruct.raw.DefaultBoneIndex].raw.Name;
 
@@ -1256,27 +1280,54 @@ int main()
 	}
 
 	
-	ProcessSkin(scene, skeletonBones, meshes);
+
+	const bool bShouldGenerateSkin = parser.get<bool>("skin");
+
+	if (bShouldGenerateSkin)
+	{
+		ProcessSkin(scene, skeletonBones, meshes);
+	}
 
 	ProcessBindPose(scene, skeletonBones, meshes);
 
-	std::map<int, HkxBone> animBones = PrepareAnimBones(scene, skeletonBones);
+	const bool bShouldExportAnimations = false;
 
-	ParseAnimations(scene, animBones);
-
-	FbxExporter* ex = FbxExporter::Create(manager, "");
-
-	ex->Initialize("out.fbx");
-	
-	const bool bDidExport = ex->Export(scene);
-
-	if (bDidExport)
+	if (bShouldExportAnimations)
 	{
-		std::cout << "Export complete" << std::endl;
+		std::map<int, HkxBone> animBones = PrepareAnimBones(scene, skeletonBones);
+
+		ParseAnimations(scene, animBones, skeletonRoot);
 	}
 	else
 	{
-		std::cout << "Export failed! " << ex->GetStatus().GetErrorString() << std::endl;
+		std::cout << "Animation export skipped." << std::endl;
+	}
+
+	FbxAxisSystem axis(FbxAxisSystem::EUpVector::eYAxis, FbxAxisSystem::EFrontVector::eParityOdd, FbxAxisSystem::ECoordSystem::eLeftHanded);
+	axis.ConvertScene(scene);
+
+	const bool bShouldExport = false;
+
+	if (bShouldExport)
+	{
+		FbxExporter* ex = FbxExporter::Create(manager, "");
+
+		ex->Initialize("out.fbx");
+
+		const bool bDidExport = ex->Export(scene);
+
+		if (bDidExport)
+		{
+			std::cout << "Export complete" << std::endl;
+		}
+		else
+		{
+			std::cout << "Export failed! " << ex->GetStatus().GetErrorString() << std::endl;
+		}
+	}
+	else
+	{
+		std::cout << "Export skipped." << std::endl;
 	}
 
 	manager->Destroy();

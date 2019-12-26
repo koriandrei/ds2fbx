@@ -96,6 +96,7 @@ namespace Hkx
 		std::string Name;
 		std::vector<int> HkxBoneIndexToTransformTrackMap;
 		std::vector<int> TransformTrackIndexToHkxBoneMap;
+		std::vector<Vector4> RootMotionFrames;
 		int BlockCount;
 		int FrameCount;
 		int NumFramesPerBlock;
