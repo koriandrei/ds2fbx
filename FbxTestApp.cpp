@@ -77,7 +77,7 @@ ParseMesh exportMesh(FbxScene* scene, const Flver::Mesh& mesh)
 		// models appear with flipped normals if input vector is used
 		// swapping X and Z seems to do the trick
 		Vector3 position = vertex.Position;
-		position[2] = -position[2];
+		//position[2] = -position[2];
 
 		fbx->SetControlPointAt(Convert(position), Convert(vertex.Normal), vertexIndex);
 		
@@ -335,17 +335,13 @@ FbxNode* ProcessBoneHierarchy(FbxScene* scene, std::map<int, ParseBone>& skeleto
 
 		FbxVector4 Location, Rotation, Scale, ShearingDummy;
 		double signDummy;
-		
+
 		boneMatrix.GetElements(Location, Rotation, ShearingDummy, Scale, signDummy);
-		
-		Location[0] = Location[0];
 
 		bone.node->LclTranslation.Set(Location);
 		bone.node->LclRotation.Set(Rotation);
 		bone.node->LclScaling.Set(Scale);
 	}
-
-
 	
 	return SkeletonRootNode;
 }
@@ -448,31 +444,21 @@ void ProcessSkin(FbxScene* scene, std::map<int, ParseBone>& skeletonBones, std::
 
 void ProcessBindPose(FbxScene* scene, std::map<int, ParseBone>& skeletonBones)
 {
-	std::cout << "Generating bind poses..." << std::endl;
-
-	//for (std::pair<const int, ParseMesh>& meshPair : meshes)
-	{
-		//std::cout << "Generating bind poses for mesh " << meshPair.first << std::endl;
-		std::cout << "Generating bind pose..." << std::endl;
-
-		//ParseMesh& mesh = meshPair.second;
+	std::cout << "Generating bind pose..." << std::endl;
 		
-		FbxPose* pose = FbxPose::Create(scene, "");
+	FbxPose* pose = FbxPose::Create(scene, "");
 
-		pose->SetIsBindPose(true);
+	pose->SetIsBindPose(true);
 
-		for (std::pair<const int, ParseBone>& bonePair : skeletonBones)
-		{
-			ParseBone& bone = bonePair.second;
+	for (std::pair<const int, ParseBone>& bonePair : skeletonBones)
+	{
+		ParseBone& bone = bonePair.second;
 
-			const FbxMatrix bindMatrix = bone.node->EvaluateGlobalTransform();
-			pose->Add(bone.node, bindMatrix);
-
-			std::cout << "Some values for bone " << bone.raw.Name << " are " << bindMatrix.Get(0, 0) << " " << bindMatrix.Get(0, 1) << " " << bindMatrix.Get(0, 2) << " " << bindMatrix.Get(0, 3) << " " << std::endl;
-		}
-
-		scene->AddPose(pose);
+		const FbxMatrix bindMatrix = bone.node->EvaluateGlobalTransform();
+		pose->Add(bone.node, bindMatrix);
 	}
+
+	scene->AddPose(pose);
 }
 
 std::map<int, HkxBone> PrepareAnimBones(std::map<int, ParseBone>& bones)
@@ -903,7 +889,14 @@ void ParseAnimations(FbxScene* scene, std::map<int, HkxBone>& animBones, const s
 	{
 		for (const std::string& animName : animationNames)
 		{
-			animFile.emplace(animName, parsed.at(animName).get<Hkx::HkxAnim>());
+			if (parsed.contains(animName))
+			{
+				animFile.emplace(animName, parsed.at(animName).get<Hkx::HkxAnim>());
+			}
+			else
+			{
+				std::cout << "No animation of name " << animName << " was found." << std::endl;
+			}
 		}
 	}
 	else
@@ -1010,9 +1003,6 @@ void ParseAnimations(FbxScene* scene, std::map<int, HkxBone>& animBones, const s
 					const Hkx::SplineTrackQuaternion& rotationTrack = track.SplineRotation;
 
 					rotationToSet = NurbsHelper<Quaternion, true>::Evaluate(rotationTrack.Degree, frameIndex, rotationTrack.Knots, track.SplineRotation.Channel.Values);
-					//Quaternion rotY;
-					//gmtl::set(rotY, gmtl::EulerAngleXYZd(0, 3.14, 0));
-					//rotationToSet *= rotY;
 				}
 				else if (track.HasStaticRotation)
 				{
@@ -1027,32 +1017,11 @@ void ParseAnimations(FbxScene* scene, std::map<int, HkxBone>& animBones, const s
 				Matrix4x4 rot;
 				gmtl::setRot(rot, rotationToSet);
 
-				Matrix4x4 finalTransform = translate * rot *scale;// * rot;
+				Matrix4x4 finalTransform = translate * rot *scale;
 
 				gmtl::transpose(finalTransform);
-/*
-				std::cout << "for " << bone.bone.Name << " transform is " <<
-					finalTransform(0, 0) << " " << finalTransform(0, 1) << " " << finalTransform(0, 2) << " " << finalTransform(0, 3) << " " <<
-					finalTransform(1, 0)<< " " << finalTransform(1, 1) << " "<< finalTransform(1, 2) << " "<< finalTransform(1, 3) << " " <<
-					finalTransform(2, 0)<< " " << finalTransform(2, 1) << " "<< finalTransform(2, 2) << " "<< finalTransform(2, 3) << " " <<
-					finalTransform(3, 0)<< " " << finalTransform(3, 1) << " "<< finalTransform(3, 2) << " "<< finalTransform(3, 3) << std::endl;*/
 
 				localBoneTransforms.emplace(boneIndex, finalTransform);
-
-				//FbxMatrix fbxM(
-				//	finalTransform(0, 0), finalTransform(0, 1), finalTransform(0, 2), finalTransform(0, 3),
-				//	finalTransform(1, 0), finalTransform(1, 1), finalTransform(1, 2), finalTransform(1, 3),
-				//	finalTransform(2, 0), finalTransform(2, 1), finalTransform(2, 2), finalTransform(2, 3),
-				//	finalTransform(3, 0), finalTransform(3, 1), finalTransform(3, 2), finalTransform(3, 3)
-				//);
-
-				//FbxVector4 translateV, scaleV, rotateV, shearingDummyV;
-				//double signDummy;
-				//fbxM/*.Transpose()*/.GetElements(translateV, rotateV, shearingDummyV, scaleV, signDummy);
-
-				//node.translation.AddPoint(time, translateV);
-				//node.rotation.AddPoint(time, rotateV);
-				//node.scale.AddPoint(time, scaleV);
 			}
 		
 			std::map<int, Matrix4x4> globalBoneTransforms;
@@ -1069,30 +1038,7 @@ void ParseAnimations(FbxScene* scene, std::map<int, HkxBone>& animBones, const s
 					globalBoneTransform = globalBoneTransform * localBoneTransforms[parentIndex];
 				}
 
-				Matrix4x4 rotateY;
-
-				gmtl::set(rotateY, gmtl::EulerAngleXYZd(0, 3.14, 0));
-
-				globalBoneTransform = rotateY * globalBoneTransform;
-
-				Vector3 globalBoneTranslation;
-				gmtl::setTrans(globalBoneTranslation, globalBoneTransform);
-
-				globalBoneTranslation[0] = -globalBoneTranslation[0];
-
-				gmtl::setTrans(globalBoneTransform, globalBoneTranslation);
-
-				
-
 				globalBoneTransforms.emplace(boneIndex, globalBoneTransform);
-
-
-				//if (frameIndex == 0)
-				//std::cout << "for " << bone.bone.Name << " transform is " <<
-				//	globalBoneTransform(0, 0) << " " << globalBoneTransform(0, 1) << " " << globalBoneTransform(0, 2) << " " << globalBoneTransform(0, 3) << " " <<
-				//	globalBoneTransform(1, 0)<< " " << globalBoneTransform(1, 1) << " "<< globalBoneTransform(1, 2) << " "<< globalBoneTransform(1, 3) << " " <<
-				//	globalBoneTransform(2, 0)<< " " << globalBoneTransform(2, 1) << " "<< globalBoneTransform(2, 2) << " "<< globalBoneTransform(2, 3) << " " <<
-				//	globalBoneTransform(3, 0)<< " " << globalBoneTransform(3, 1) << " "<< globalBoneTransform(3, 2) << " "<< globalBoneTransform(3, 3) << std::endl;
 			}
 
 			for (std::pair<const int, HkxBone>& bonePair : animBones)
@@ -1115,23 +1061,15 @@ void ParseAnimations(FbxScene* scene, std::map<int, HkxBone>& animBones, const s
 
 				FbxVector4 translateV, scaleV, rotateV, shearingDummyV;
 				double signDummy;
-				finalFbxBoneTransform/*.Transpose()*/.GetElements(translateV, rotateV, shearingDummyV, scaleV, signDummy);
+				finalFbxBoneTransform.GetElements(translateV, rotateV, shearingDummyV, scaleV, signDummy);
 
 				FbxAnimNodes& node = nodes.at(boneIndex);
-
-				//FbxVector4 translateVgen(frameIndex,0, 0);
-
-				//node.translation.AddPoint(time, translateVgen);
-				//node.rotation.AddPoint(time, FbxVector4(0, 0, 0));
-
-				//node.rotation.AddPoint(time, FbxVector4(0, frameIndex, 0));
-				//node.scale.AddPoint(time, FbxVector4(1, 1, 1));
 
 				node.translation.AddPoint(time, translateV);
 				node.rotation.AddPoint(time, rotateV);
 				node.scale.AddPoint(time, scaleV);
 
-				if (bone.bone.Name == "Root")
+				if (!anim.is_root_motion_present && bone.bone.Name == "Root")
 				{
 					rootAnimNode.translation.AddPoint(time, translateV);
 					rootAnimNode.rotation.AddPoint(time, rotateV);
@@ -1145,6 +1083,20 @@ void ParseAnimations(FbxScene* scene, std::map<int, HkxBone>& animBones, const s
 			nnode.second.translation.Finish();
 			nnode.second.rotation.Finish();
 			nnode.second.scale.Finish();
+		}
+
+		if (anim.is_root_motion_present)
+		{
+			for (int rootMotionFrameIndex = 0; rootMotionFrameIndex < anim.RootMotionFrames.size(); ++rootMotionFrameIndex)
+			{
+				const double frameTime = anim.Duration * (double) rootMotionFrameIndex / anim.RootMotionFrames.size();
+
+				FbxTime time;
+				time.SetSecondDouble(frameTime);
+				
+				rootAnimNode.translation.AddPoint(time, Convert(anim.RootMotionFrames[rootMotionFrameIndex]));
+				rootAnimNode.rotation.AddPoint(time, FbxVector4(0, anim.RootMotionFrames[rootMotionFrameIndex][3], 0));
+			}
 		}
 
 		rootAnimNode.translation.Finish();

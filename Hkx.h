@@ -98,6 +98,8 @@ namespace Hkx
 		std::string Name;
 		std::vector<int> HkxBoneIndexToTransformTrackMap;
 		std::vector<int> TransformTrackIndexToHkxBoneMap;
+		double Duration = 0;
+		bool is_root_motion_present = false;
 		std::vector<Vector4> RootMotionFrames;
 		int BlockCount;
 		int FrameCount;

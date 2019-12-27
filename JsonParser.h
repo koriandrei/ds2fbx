@@ -92,6 +92,26 @@ namespace Hkx
 		return v;
 	}
 
+	inline Vector4 ParseStringVector4(std::string vector_string)
+	{
+		size_t first_comma = vector_string.find(',');
+		size_t second_comma = vector_string.find(',', first_comma + 1);
+		size_t third_comma = vector_string.find(',', first_comma + 1);
+		std::string v1 = vector_string.substr(0, first_comma);
+		std::string v2 = vector_string.substr(first_comma + 1, second_comma - first_comma - 1);
+		std::string v3 = vector_string.substr(second_comma + 1, third_comma - second_comma - 1);
+		std::string v4 = vector_string.substr(third_comma + 1);
+
+		Vector4 v;
+
+		v[0] = std::stod(v1);
+		v[1] = std::stod(v2);
+		v[2] = std::stod(v3);
+		v[3] = std::stod(v4);
+
+		return v;
+	}
+
 	inline void from_json(const json& j, TransformMask& val)
 	{
 		JSON_FROM(PositionTypes);
@@ -139,7 +159,21 @@ namespace Hkx
 		JSON_FROM(Name);
 		JSON_FROM(HkxBoneIndexToTransformTrackMap);
 		JSON_FROM(TransformTrackIndexToHkxBoneMap);
-		JSON_FROM( BlockCount);
+		const json& rootMotion = j.at("RootMotionFrames");
+		if (rootMotion.is_null())
+		{
+			val.is_root_motion_present = false;
+		}
+		if (rootMotion.is_array())
+		{
+			for (const std::string stringRootMotionVector : rootMotion.get<std::vector<std::string>>())
+			{
+				val.RootMotionFrames.push_back(ParseStringVector4(stringRootMotionVector));
+			}
+			val.is_root_motion_present = true;
+		}
+		JSON_FROM(Duration);
+		JSON_FROM(BlockCount);
 		JSON_FROM(NumFramesPerBlock);
 		JSON_FROM(FrameCount);
 	}
