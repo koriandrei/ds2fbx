@@ -9,10 +9,12 @@
 #include <algorithm>
 #include <cmath>
 #include <optional>
+#include <limits>
 
 #include <args/args.hxx>
 #include "json/json.hpp"
 #include <fbxsdk.h>
+
 #pragma warning(pop)
 
 #include "Flver.h"
@@ -29,6 +31,17 @@ FbxVector4 Convert(const Vector4& vector)
 	return FbxVector4(vector[0], vector[1], vector[2], vector[3]);
 }
 
+FbxMatrix Convert(const Matrix4x4& matrix)
+{
+	FbxMatrix fbxM(
+		matrix(0, 0), matrix(0, 1), matrix(0, 2), matrix(0, 3),
+		matrix(1, 0), matrix(1, 1), matrix(1, 2), matrix(1, 3),
+		matrix(2, 0), matrix(2, 1), matrix(2, 2), matrix(2, 3),
+		matrix(3, 0), matrix(3, 1), matrix(3, 2), matrix(3, 3)
+	);
+
+	return fbxM;
+}
 
 template <class TFbx, class TRaw>
 struct TFbxNodeHelper
@@ -172,8 +185,6 @@ struct HkxBone
 	Hkx::Transform transform;
 };
 
-void RecurseDeep(ParseBone& currentBone, std::map<int, ParseBone>& allBones);
-
 std::vector<int> GetSiblingIndices(const int nodeIndex, const std::map<int, ParseBone>& allBones)
 {
 	std::vector<int> siblingIndices;
@@ -186,54 +197,36 @@ std::vector<int> GetSiblingIndices(const int nodeIndex, const std::map<int, Pars
 	return siblingIndices;
 }
 
-void RecurseWide(ParseBone& currentBone, std::map<int, ParseBone>& allBones)
+void RecurseDeep(const short boneIndex, ParseBone& currentBone, std::map<short, ParseBone>& allBones)
 {
-	RecurseDeep(currentBone, allBones);
+	std::vector<short> childIndices;
 
-	if (currentBone.raw.NextSiblingIndex < 0)
+	for (const std::pair<const int, ParseBone>& bone : allBones)
+	{
+		if (bone.second.raw.ParentIndex == boneIndex)
+		{
+			childIndices.push_back(bone.first);
+		}
+	}
+
+	if (childIndices.size() == 0)
 	{
 		return;
 	}
 
-
-	const short NextSiblingIndex = currentBone.raw.NextSiblingIndex;
-	ParseBone& SiblingBone = allBones[NextSiblingIndex];
-
-	std::cout << "Now on " << currentBone.raw.Name << ". Going wide to " << SiblingBone.raw.Name << std::endl;
-
-	RecurseWide(SiblingBone, allBones);
-}
-
-void RecurseDeep(ParseBone& currentBone, std::map<int, ParseBone>& allBones)
-{
-	if (currentBone.raw.ChildIndex < 0)
-	{
-		return;
-	}
-
-	const short nextChildIndex = currentBone.raw.ChildIndex;
-	
-	for (const int childIndex : GetSiblingIndices(nextChildIndex, allBones))
+	for (const int childIndex : childIndices)
 	{
 		ParseBone& childBone = allBones[childIndex];
 
 		std::cout << "Visited " << currentBone.raw.Name << ". It is parent to " << childBone.raw.Name << std::endl;
 
-		//constexpr float RadianToDegree = 180.0f / 3.14f;
-
-		const Vector3 rotationRadian = childBone.raw.Rotation;
-
-		//const Vector3 rotationDegrees(rotationRadian[0] * RadianToDegree, rotationRadian[1] * RadianToDegree, rotationRadian[2] * RadianToDegree);
-
-		//const Vector3& rotationToSet = Vector3(-rotationRadian[0], -rotationRadian[1], -rotationRadian[2]);
-
 		currentBone.node->AddChild(childBone.node);
 
-		RecurseDeep(childBone, allBones);
+		RecurseDeep(childIndex, childBone, allBones);
 	}
 }
 
-FbxMatrix GetWorldTransform(const ParseBone& bone, const std::map<int, ParseBone>& allBones)
+Matrix4x4 GetWorldTransform(const ParseBone& bone, const std::map<short, ParseBone>& allBones)
 {
 	ParseBone currentBone = bone;
 
@@ -289,17 +282,18 @@ FbxMatrix GetWorldTransform(const ParseBone& bone, const std::map<int, ParseBone
 		currentBone = allBones.at(currentBone.raw.ParentIndex);
 	} while (true);
 
-	return FbxMatrix(
-		Result[0][0], Result[0][1], Result[0][2], Result[0][3],
-		Result[1][0], Result[1][1], Result[1][2], Result[1][3],
-		Result[2][0], Result[2][1], Result[2][2], Result[2][3],
-		Result[3][0], Result[3][1], Result[3][2], Result[3][3]
-	).Transpose();
+	gmtl::transpose(Result);
 
-	//return Result;
+	return Result;
 }
 
-FbxNode* ProcessBoneHierarchy(FbxScene* scene, std::map<int, ParseBone>& skeletonBones)
+struct SkeletonHelper
+{
+	FbxNode* RootBone;
+	FbxNode* FixBone;
+};
+
+FbxNode* ProcessBoneHierarchy(FbxScene* scene, std::map<short, ParseBone>& skeletonBones)
 {
 	FbxNode* SkeletonRootNode = FbxNode::Create(scene, "ActualRoot_Node");
 
@@ -309,34 +303,92 @@ FbxNode* ProcessBoneHierarchy(FbxScene* scene, std::map<int, ParseBone>& skeleto
 
 	SkeletonRootNode->SetNodeAttribute(skel);
 
-	for (std::pair<const int, ParseBone>& bone : skeletonBones)
+/*
+	FbxNode* fixNode = FbxNode::Create(scene, "ActualRoot_Node");
+
+	FbxSkeleton* fixBone = FbxSkeleton::Create(scene, "ActualRoot_Skel");
+
+	fixBone->SetSkeletonType(FbxSkeleton::EType::eLimb);
+
+	fixNode->SetNodeAttribute(fixBone);
+
+	SkeletonRootNode->AddChild(fixNode);*/
+
+
+	// calculating bone world transforms
+	std::map<short, Matrix4x4> boneWorldTransforms;
+
+	for (std::pair<const short, ParseBone>& bonePair : skeletonBones)
+	{
+		ParseBone& bone = bonePair.second;
+
+		Matrix4x4 worldMatrix = GetWorldTransform(bone, skeletonBones);
+
+		boneWorldTransforms.emplace(bonePair.first, worldMatrix);
+	}
+
+	// fixing hierarchy: sometimes Spine is not a child of Pelvis
+	for (std::pair<const short, ParseBone>& bone : skeletonBones)
+	{
+		if (bone.second.raw.Name == "Spine")
+		{
+			//if (bone.second.raw.ParentIndex < 0)
+			{
+				const auto& pelvis = std::find_if(skeletonBones.begin(), skeletonBones.end(), [](const std::pair<const int, ParseBone>& bone)-> bool { return bone.second.raw.Name == "Pelvis"; });
+
+				assert(pelvis != skeletonBones.end());
+
+				const short PreviousBoneParent = bone.second.raw.ParentIndex;
+
+				bone.second.raw.ParentIndex = pelvis->first;
+
+				std::cout << "Rewrote " << bone.second.raw.Name << "'s parent " << PreviousBoneParent << " to " << pelvis->second.raw.Name << " " << pelvis->first << std::endl;
+			}
+		}
+	}
+
+	// creating FBX skeleton hierarchy
+	for (std::pair<const short, ParseBone>& bone : skeletonBones)
 	{
 		if (bone.second.raw.ParentIndex < 0)
 		{
 			std::cout << "Entering bone " << bone.second.raw.Name << std::endl;
 
-			RecurseDeep(bone.second, skeletonBones);
+			RecurseDeep(bone.first, bone.second, skeletonBones);
 
 			SkeletonRootNode->AddChild(bone.second.node);
 		}
 	}
 
-	for (std::pair<const int, ParseBone>& bonePair : skeletonBones)
+	// calculate bones' starting transforms
+	for (std::pair<const short, ParseBone>& bonePair : skeletonBones)
 	{
+		const short boneIndex = bonePair.first;
 		ParseBone& bone = bonePair.second;
 
-		FbxMatrix boneMatrix = GetWorldTransform(bone, skeletonBones);
+		//Matrix4x4 boneMatrix = boneWorldTransforms.at(boneIndex);
+
+		FbxMatrix boneMatrixFbx = Convert(boneWorldTransforms.at(boneIndex));
 
 		if (bone.raw.ParentIndex >= 0)
 		{
-			const FbxMatrix parentMatrix = GetWorldTransform(skeletonBones[bone.raw.ParentIndex], skeletonBones);
-			boneMatrix = parentMatrix.Inverse() * boneMatrix;
+			const FbxMatrix parentMatrixFbx = Convert(boneWorldTransforms.at(bone.raw.ParentIndex));
+
+			boneMatrixFbx = parentMatrixFbx.Inverse() * boneMatrixFbx;
+
+			//Matrix4x4 parentMatrix = boneWorldTransforms.at(bone.raw.ParentIndex);
+			//gmtl::invert(parentMatrix);
+			//boneMatrix = parentMatrix * boneMatrix;
 		}
 
 		FbxVector4 Location, Rotation, Scale, ShearingDummy;
 		double signDummy;
 
-		boneMatrix.GetElements(Location, Rotation, ShearingDummy, Scale, signDummy);
+		//const FbxMatrix fbxMatrix = Convert(boneMatrix);
+
+		const FbxMatrix fbxMatrix = boneMatrixFbx;
+
+		fbxMatrix.GetElements(Location, Rotation, ShearingDummy, Scale, signDummy);
 
 		bone.node->LclTranslation.Set(Location);
 		bone.node->LclRotation.Set(Rotation);
@@ -346,7 +398,7 @@ FbxNode* ProcessBoneHierarchy(FbxScene* scene, std::map<int, ParseBone>& skeleto
 	return SkeletonRootNode;
 }
 
-void ProcessSkin(FbxScene* scene, std::map<int, ParseBone>& skeletonBones, std::map<int, ParseMesh>& meshes)
+void ProcessSkin(FbxScene* scene, std::map<short, ParseBone>& skeletonBones, std::map<int, ParseMesh>& meshes)
 {
 	for (std::pair<const int, ParseMesh>& meshPair : meshes)
 	{
@@ -358,9 +410,9 @@ void ProcessSkin(FbxScene* scene, std::map<int, ParseBone>& skeletonBones, std::
 
 		std::map<int, int> vertexBoneIndicesCount;
 
-		for (std::pair<const int, ParseBone>& bonePair : skeletonBones)
+		for (std::pair<const short, ParseBone>& bonePair : skeletonBones)
 		{
-			const int currentBoneIndex = bonePair.first;
+			const short currentBoneIndex = bonePair.first;
 			ParseBone& bone = bonePair.second;
 
 			FbxCluster* cluster = FbxCluster::Create(bone.object, "");
@@ -442,7 +494,7 @@ void ProcessSkin(FbxScene* scene, std::map<int, ParseBone>& skeletonBones, std::
 	}
 }
 
-void ProcessBindPose(FbxScene* scene, std::map<int, ParseBone>& skeletonBones)
+void ProcessBindPose(FbxScene* scene, std::map<short, ParseBone>& skeletonBones)
 {
 	std::cout << "Generating bind pose..." << std::endl;
 		
@@ -450,7 +502,7 @@ void ProcessBindPose(FbxScene* scene, std::map<int, ParseBone>& skeletonBones)
 
 	pose->SetIsBindPose(true);
 
-	for (std::pair<const int, ParseBone>& bonePair : skeletonBones)
+	for (std::pair<const short, ParseBone>& bonePair : skeletonBones)
 	{
 		ParseBone& bone = bonePair.second;
 
@@ -461,7 +513,7 @@ void ProcessBindPose(FbxScene* scene, std::map<int, ParseBone>& skeletonBones)
 	scene->AddPose(pose);
 }
 
-std::map<int, HkxBone> PrepareAnimBones(std::map<int, ParseBone>& bones)
+std::map<short, HkxBone> PrepareAnimBones(std::map<short, ParseBone>& bones)
 {
 	std::cout << "Reading hkx skel..." << std::endl;
 
@@ -479,13 +531,15 @@ std::map<int, HkxBone> PrepareAnimBones(std::map<int, ParseBone>& bones)
 
 	std::cout << "Parsed skel" << std::endl;
 
-	std::map<int, HkxBone> hkxBones;
+	std::map<short, HkxBone> hkxBones;
 
-	for (int hkxBoneIndex = 0; hkxBoneIndex < skel.Bones.size(); ++hkxBoneIndex)
+	assert(skel.Bones.size() <= std::numeric_limits<short>::max());
+
+	for (short hkxBoneIndex = 0; hkxBoneIndex < skel.Bones.size(); ++hkxBoneIndex)
 	{
 		const Hkx::Bone& bone = skel.Bones[hkxBoneIndex];
 
-		auto flverBone = std::find_if(bones.begin(), bones.end(), [hkxBoneName = bone.Name](const std::pair<const int, ParseBone>& iter) -> bool { return iter.second.raw.Name == hkxBoneName; });
+		auto flverBone = std::find_if(bones.begin(), bones.end(), [hkxBoneName = bone.Name](const std::pair<const short, ParseBone>& iter) -> bool { return iter.second.raw.Name == hkxBoneName; });
 
 		assert(flverBone != bones.end());
 
@@ -857,20 +911,8 @@ struct VectorSplineHelper
 	}
 };
 
-FbxMatrix Convert(const Matrix4x4& matrix)
-{
-		FbxMatrix fbxM(
-			matrix(0, 0), matrix(0, 1), matrix(0, 2), matrix(0, 3),
-			matrix(1, 0), matrix(1, 1), matrix(1, 2), matrix(1, 3),
-			matrix(2, 0), matrix(2, 1), matrix(2, 2), matrix(2, 3),
-			matrix(3, 0), matrix(3, 1), matrix(3, 2), matrix(3, 3)
-		);
 
-		return fbxM;
-}
-
-
-void ParseAnimations(FbxScene* scene, std::map<int, HkxBone>& animBones, const std::vector<std::string>& animationNames, FbxNode* rootBone)
+void ParseAnimations(FbxScene* scene, std::map<short, HkxBone>& animBones, const std::vector<std::string>& animationNames, FbxNode* rootBone)
 {
 	std::cout << "Reading hkx animations..." << std::endl;
 
@@ -925,9 +967,9 @@ void ParseAnimations(FbxScene* scene, std::map<int, HkxBone>& animBones, const s
 
 		std::map<int, FbxAnimNodes> nodes;
 
-		for (std::pair<const int, HkxBone>& bonePair : animBones)
+		for (std::pair<const short, HkxBone>& bonePair : animBones)
 		{
-			const int boneIndex = bonePair.first;
+			const short boneIndex = bonePair.first;
 			HkxBone& bone = bonePair.second;
 
 			bone.node->LclTranslation.GetCurveNode(animLayer, /*bCreate =*/ true);
@@ -952,21 +994,12 @@ void ParseAnimations(FbxScene* scene, std::map<int, HkxBone>& animBones, const s
 
 			const int blockIndex = static_cast<int>(std::floor(((double)(frameInBlockIndex)) / anim.NumFramesPerBlock));
 
-			//std::cout << "time is " << frameIndex << std::endl;
-
 			std::map<int, Matrix4x4> localBoneTransforms;
 
-			for (std::pair<const int, HkxBone>& bonePair : animBones)
+			for (std::pair<const short, HkxBone>& bonePair : animBones)
 			{
-				const int boneIndex = bonePair.first;
+				const short boneIndex = bonePair.first;
 				HkxBone& bone = bonePair.second;
-				//FbxAnimNodes& node = nodes.at(boneIndex);
-
-
-				if (frameIndex == 1)
-				{
-					//std::cout << "frame 1!";
-				}
 
 				const int trackIndex = anim.HkxBoneIndexToTransformTrackMap[boneIndex];
 
@@ -974,15 +1007,7 @@ void ParseAnimations(FbxScene* scene, std::map<int, HkxBone>& animBones, const s
 
 				const Hkx::HkxTrack& track = anim.Tracks[blockIndex][trackIndex];
 
-					//VectorSplineHelper<TransformPart::Position, VectorPart::X>::ProcessFbxBones(node, time, track, bone.transform, frameInBlockIndex);
-					//VectorSplineHelper<TransformPart::Position, VectorPart::Y>::ProcessFbxBones(node, time, track, bone.transform, frameInBlockIndex);
-					//VectorSplineHelper<TransformPart::Position, VectorPart::Z>::ProcessFbxBones(node, time, track, bone.transform, frameInBlockIndex);
-
-					//VectorSplineHelper<TransformPart::Scale, VectorPart::X>::ProcessFbxBones(node, time, track, bone.transform, frameInBlockIndex);
-					//VectorSplineHelper<TransformPart::Scale, VectorPart::Y>::ProcessFbxBones(node, time, track, bone.transform, frameInBlockIndex);
-					//VectorSplineHelper<TransformPart::Scale, VectorPart::Z>::ProcessFbxBones(node, time, track, bone.transform, frameInBlockIndex);
-
-
+				
 				auto posX = VectorSplineHelper<TransformPart::Position, VectorPart::X>::Evaluate(track, bone.transform, frameInBlockIndex);
 				auto posY = VectorSplineHelper<TransformPart::Position, VectorPart::Y>::Evaluate(track, bone.transform, frameInBlockIndex);
 				auto posZ = VectorSplineHelper<TransformPart::Position, VectorPart::Z>::Evaluate(track, bone.transform, frameInBlockIndex);
@@ -1027,13 +1052,13 @@ void ParseAnimations(FbxScene* scene, std::map<int, HkxBone>& animBones, const s
 			std::map<int, Matrix4x4> globalBoneTransforms;
 
 
-			for (std::pair<const int, HkxBone>& bonePair : animBones)
+			for (std::pair<const short, HkxBone>& bonePair : animBones)
 			{
 				const int boneIndex = bonePair.first;
 
 				Matrix4x4 globalBoneTransform;
 
-				for (int parentIndex = boneIndex; parentIndex >= 0; parentIndex = animBones[parentIndex].ParentIndex)
+				for (short parentIndex = boneIndex; parentIndex >= 0; parentIndex = animBones[parentIndex].ParentIndex)
 				{
 					globalBoneTransform = globalBoneTransform * localBoneTransforms[parentIndex];
 				}
@@ -1041,7 +1066,7 @@ void ParseAnimations(FbxScene* scene, std::map<int, HkxBone>& animBones, const s
 				globalBoneTransforms.emplace(boneIndex, globalBoneTransform);
 			}
 
-			for (std::pair<const int, HkxBone>& bonePair : animBones)
+			for (std::pair<const short, HkxBone>& bonePair : animBones)
 			{
 				const int boneIndex = bonePair.first;
 				HkxBone& bone = bonePair.second;
@@ -1069,9 +1094,32 @@ void ParseAnimations(FbxScene* scene, std::map<int, HkxBone>& animBones, const s
 				node.rotation.AddPoint(time, rotateV);
 				node.scale.AddPoint(time, scaleV);
 
-				if (!anim.is_root_motion_present && bone.bone.Name == "Root")
+				if (false && bone.bone.Name == "Root")
 				{
-					rootAnimNode.translation.AddPoint(time, translateV);
+					FbxVector4 rootBoneRefTranslation = bone.node->LclTranslation.Get();
+
+					FbxVector4 resultingRootMotionTranslation = translateV - rootBoneRefTranslation;
+
+					if (anim.is_root_motion_present)
+					{
+						const float relativeFramePosition = (double)frameIndex / anim.FrameCount;
+
+						const int rootMotionFrameIndex = (int)(relativeFramePosition * anim.RootMotionFrames.size());
+
+						Vector4 rootMotionData = anim.RootMotionFrames[rootMotionFrameIndex];
+
+						Vector3 rootMotionTranslation(rootMotionData[0], rootMotionData[1], rootMotionData[2]);
+
+						const float rootMotionVerticalAxisRotation = rootMotionData[3];
+
+						resultingRootMotionTranslation += Convert(anim.RootMotionFrames[rootMotionFrameIndex]);
+
+						rotateV[1] += anim.RootMotionFrames[rootMotionFrameIndex][3];
+					}
+
+
+
+					rootAnimNode.translation.AddPoint(time, resultingRootMotionTranslation);
 					rootAnimNode.rotation.AddPoint(time, rotateV);
 					rootAnimNode.scale.AddPoint(time, scaleV);
 				}
@@ -1083,20 +1131,6 @@ void ParseAnimations(FbxScene* scene, std::map<int, HkxBone>& animBones, const s
 			nnode.second.translation.Finish();
 			nnode.second.rotation.Finish();
 			nnode.second.scale.Finish();
-		}
-
-		if (anim.is_root_motion_present)
-		{
-			for (int rootMotionFrameIndex = 0; rootMotionFrameIndex < anim.RootMotionFrames.size(); ++rootMotionFrameIndex)
-			{
-				const double frameTime = anim.Duration * (double) rootMotionFrameIndex / anim.RootMotionFrames.size();
-
-				FbxTime time;
-				time.SetSecondDouble(frameTime);
-				
-				rootAnimNode.translation.AddPoint(time, Convert(anim.RootMotionFrames[rootMotionFrameIndex]));
-				rootAnimNode.rotation.AddPoint(time, FbxVector4(0, anim.RootMotionFrames[rootMotionFrameIndex][3], 0));
-			}
 		}
 
 		rootAnimNode.translation.Finish();
@@ -1171,11 +1205,13 @@ int main(int argc, char* argv[])
 
 	FbxNode* sceneRoot = scene->GetRootNode();
 
-	std::map<int, ParseBone> skeletonBones;
+	std::map<short, ParseBone> skeletonBones;
 
 	if (shouldGenerateBones)
 	{
-		for (int boneIndex = 0; boneIndex < f.Bones.size(); ++boneIndex)
+		assert(f.Bones.size() <= std::numeric_limits<short>::max());
+
+		for (short boneIndex = 0; boneIndex < f.Bones.size(); ++boneIndex)
 		{
 			const Flver::Bone& bone = f.Bones[boneIndex];
 
@@ -1186,6 +1222,7 @@ int main(int argc, char* argv[])
 			std::cout << "Generated bone #" << boneIndex << " " << bone.Name << std::endl;
 		}
 	}
+
 	FbxNode* skeletonRoot = nullptr;
 	
 	if (shouldGenerateBones)
@@ -1251,7 +1288,7 @@ int main(int argc, char* argv[])
 
 	if (shouldExportAnimations.Get() || animationNames.Matched())
 	{
-		std::map<int, HkxBone> animBones = PrepareAnimBones(skeletonBones);
+		std::map<short, HkxBone> animBones = PrepareAnimBones(skeletonBones);
 
 		ParseAnimations(scene, animBones, animationNames.Get(), skeletonRoot);
 	}
