@@ -1051,7 +1051,6 @@ void ParseAnimations(FbxScene* scene, std::map<short, HkxBone>& animBones, const
 		
 			std::map<int, Matrix4x4> globalBoneTransforms;
 
-
 			for (std::pair<const short, HkxBone>& bonePair : animBones)
 			{
 				const int boneIndex = bonePair.first;
@@ -1066,6 +1065,35 @@ void ParseAnimations(FbxScene* scene, std::map<short, HkxBone>& animBones, const
 				globalBoneTransforms.emplace(boneIndex, globalBoneTransform);
 			}
 
+			std::map<short, short> parentsMap;
+
+
+			// fixing hierarchy: sometimes Spine is not a child of Pelvis
+			for (const std::pair<const short, HkxBone>& bone : animBones)
+			{
+				if (bone.second.ParentIndex >= 0)
+				{
+					parentsMap[bone.first] = bone.second.ParentIndex;
+				}
+			}
+
+			const std::map<std::string, std::string> redirects = { {"Spine", "Pelvis"}, {"Pelvis", "Master"} };
+			for (const std::pair<const std::string, std::string>& redirect : redirects)
+			{
+				const auto& childBone = std::find_if(animBones.begin(), animBones.end(), [&redirect](const std::pair<const short, HkxBone>& bone)-> bool { return bone.second.bone.Name == redirect.first; });
+				const auto& requiredParentBone = std::find_if(animBones.begin(), animBones.end(), [&redirect](const std::pair<const short, HkxBone>& bone)-> bool { return bone.second.bone.Name == redirect.second; });
+
+				assert(childBone != animBones.end());
+				assert(requiredParentBone != animBones.end());
+
+				parentsMap[childBone->first] = requiredParentBone->first;
+			}
+
+			//for (const std::pair<const short, HkxBone>& bone : animBones)
+			//{
+			//	std::cout << bone.second.bone.Name << " child to " << (parentsMap.count(bone.first) == 0 ? "nothing" : animBones.at(parentsMap.at(bone.first)).bone.Name) << std::endl;
+			//}
+
 			for (std::pair<const short, HkxBone>& bonePair : animBones)
 			{
 				const int boneIndex = bonePair.first;
@@ -1077,16 +1105,27 @@ void ParseAnimations(FbxScene* scene, std::map<short, HkxBone>& animBones, const
 
 				if (bone.ParentIndex >= 0)
 				{
-					FbxMatrix parentFbxBoneTransform = Convert(globalBoneTransforms[bone.ParentIndex]);// .Transpose();
+					FbxMatrix parentFbxBoneTransform = Convert(globalBoneTransforms[parentsMap.at(boneIndex)]);// .Transpose();
 
 					finalFbxBoneTransform = parentFbxBoneTransform.Inverse() * finalFbxBoneTransform;
 				}
 
 
-
 				FbxVector4 translateV, scaleV, rotateV, shearingDummyV;
 				double signDummy;
 				finalFbxBoneTransform.GetElements(translateV, rotateV, shearingDummyV, scaleV, signDummy);
+
+				//if (bone.bone.Name == "Spine" || bone.bone.Name == "Pelvis" || bone.bone.Name == "Master" || bone.bone.Name == "Root")
+				//{
+				//	FbxVector4 globalTrans;
+				//	FbxVector4 dummy;
+				//	double dummy2;
+
+				//	Convert(finalBoneTransform).GetElements(globalTrans, dummy, dummy, dummy, dummy2);
+
+				//	std::cout << "Bone " << bone.bone.Name << " relative trans " << translateV[0] << " " << translateV[1] << " " << translateV[2] << std::endl;
+				//	std::cout << "Bone " << bone.bone.Name << " global trans " << globalTrans[0] << " " << globalTrans[1] << " " << globalTrans[2] << std::endl;
+				//}
 
 				FbxAnimNodes& node = nodes.at(boneIndex);
 
@@ -1100,29 +1139,28 @@ void ParseAnimations(FbxScene* scene, std::map<short, HkxBone>& animBones, const
 
 					FbxVector4 resultingRootMotionTranslation = translateV - rootBoneRefTranslation;
 
-					if (anim.is_root_motion_present)
-					{
-						const float relativeFramePosition = (double)frameIndex / anim.FrameCount;
-
-						const int rootMotionFrameIndex = (int)(relativeFramePosition * anim.RootMotionFrames.size());
-
-						Vector4 rootMotionData = anim.RootMotionFrames[rootMotionFrameIndex];
-
-						Vector3 rootMotionTranslation(rootMotionData[0], rootMotionData[1], rootMotionData[2]);
-
-						const float rootMotionVerticalAxisRotation = rootMotionData[3];
-
-						resultingRootMotionTranslation += Convert(anim.RootMotionFrames[rootMotionFrameIndex]);
-
-						rotateV[1] += anim.RootMotionFrames[rootMotionFrameIndex][3];
-					}
-
-
-
-					rootAnimNode.translation.AddPoint(time, resultingRootMotionTranslation);
-					rootAnimNode.rotation.AddPoint(time, rotateV);
-					rootAnimNode.scale.AddPoint(time, scaleV);
 				}
+			}
+		
+
+			if (anim.is_root_motion_present)
+			{
+				const float relativeFramePosition = (double)frameIndex / anim.FrameCount;
+
+				const int rootMotionFrameIndex = (int)(relativeFramePosition * anim.RootMotionFrames.size());
+
+				Vector4 rootMotionData = anim.RootMotionFrames[rootMotionFrameIndex];
+
+				Vector3 rootMotionTranslation(rootMotionData[0], rootMotionData[1], rootMotionData[2]);
+
+				const float rootMotionVerticalAxisRotation = rootMotionData[3];
+
+				FbxVector4 Translation = Convert(rootMotionTranslation);
+
+				FbxVector4 rotation(0, rootMotionVerticalAxisRotation, 0);
+
+				rootAnimNode.translation.AddPoint(time, Translation);
+				rootAnimNode.rotation.AddPoint(time, rotation);
 			}
 		}
 		
