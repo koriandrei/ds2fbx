@@ -91,6 +91,7 @@ ParseMesh exportMesh(FbxScene* scene, const Flver::Mesh& mesh)
 		// swapping X and Z seems to do the trick
 		Vector3 position = vertex.Position;
 		//position[2] = -position[2];
+		position[0] = -position[0];
 
 		fbx->SetControlPointAt(Convert(position), Convert(vertex.Normal), vertexIndex);
 		
@@ -226,67 +227,6 @@ void RecurseDeep(const short boneIndex, ParseBone& currentBone, std::map<short, 
 	}
 }
 
-Matrix4x4 GetWorldTransform(const ParseBone& bone, const std::map<short, ParseBone>& allBones)
-{
-	ParseBone currentBone = bone;
-
-	Matrix4x4 Result;
-
-	do
-	{
-		constexpr double Pi = 3.14159265358979323846;
-
-		FbxVector4 translation = Convert(currentBone.raw.Translation);
-		FbxVector4 euler = Convert(currentBone.raw.Rotation) * 180.0 / Pi;
-		FbxVector4 scale = Convert(currentBone.raw.Scale);
-
-		const static FbxVector4 Empty(0, 0, 0);
-		const static FbxVector4 NoneScale(1,1,1);
-
-		Matrix4x4 scaleM;
-		gmtl::setScale(scaleM, currentBone.raw.Scale);
-
-		Matrix4x4 rotXM;
-		gmtl::setRot(rotXM, gmtl::EulerAngleXYZd(currentBone.raw.Rotation[0], 0, 0));
-		Matrix4x4 rotYM;
-		gmtl::setRot(rotYM, gmtl::EulerAngleXYZd(0, currentBone.raw.Rotation[1], 0));
-		Matrix4x4 rotZM;
-		gmtl::setRot(rotZM, gmtl::EulerAngleXYZd(0, 0, currentBone.raw.Rotation[2]));
-
-		Matrix4x4 translateM;
-		gmtl::setTrans(translateM, currentBone.raw.Translation);
-
-		const Matrix4x4 matrices[] = {
-			scaleM,
-			rotXM,
-			rotZM,
-			rotYM,
-			translateM,
-		};
-
-		Matrix4x4 scaleRes = scaleM * Result;
-		Matrix4x4 rotXRes = rotXM* scaleRes;
-		Matrix4x4 rotZRes = rotZM* rotXRes;
-
-		Matrix4x4 rotYRes = rotYM* rotZRes ;
-		Matrix4x4 transRes = translateM* rotYRes ;
-
-		Result = transRes;
-
-		if (currentBone.raw.ParentIndex < 0)
-		{
-			break;
-		}
-
-
-		currentBone = allBones.at(currentBone.raw.ParentIndex);
-	} while (true);
-
-	gmtl::transpose(Result);
-
-	return Result;
-}
-
 struct SkeletonHelper
 {
 	FbxNode* RootBone;
@@ -322,7 +262,77 @@ FbxNode* ProcessBoneHierarchy(FbxScene* scene, std::map<short, ParseBone>& skele
 	{
 		ParseBone& bone = bonePair.second;
 
-		Matrix4x4 worldMatrix = GetWorldTransform(bone, skeletonBones);
+		struct BoneWorldTransformHelper
+		{
+			static Matrix4x4 GetWorldTransform(const ParseBone& bone, const std::map<short, ParseBone>& allBones)
+			{
+				ParseBone currentBone = bone;
+
+				Matrix4x4 Result;
+
+				do
+				{
+					constexpr double Pi = 3.14159265358979323846;
+
+					FbxVector4 translation = Convert(currentBone.raw.Translation);
+					FbxVector4 euler = Convert(currentBone.raw.Rotation) * 180.0 / Pi;
+					FbxVector4 scale = Convert(currentBone.raw.Scale);
+
+					const static FbxVector4 Empty(0, 0, 0);
+					const static FbxVector4 NoneScale(1, 1, 1);
+
+					Matrix4x4 scaleM;
+					gmtl::setScale(scaleM, currentBone.raw.Scale);
+
+					Matrix4x4 rotXM;
+					gmtl::setRot(rotXM, gmtl::EulerAngleXYZd(currentBone.raw.Rotation[0], 0, 0));
+					Matrix4x4 rotYM;
+					gmtl::setRot(rotYM, gmtl::EulerAngleXYZd(0, currentBone.raw.Rotation[1], 0));
+					Matrix4x4 rotZM;
+					gmtl::setRot(rotZM, gmtl::EulerAngleXYZd(0, 0, currentBone.raw.Rotation[2]));
+
+					Matrix4x4 translateM;
+					gmtl::setTrans(translateM, currentBone.raw.Translation);
+
+					const Matrix4x4 matrices[] = {
+						scaleM,
+						rotXM,
+						rotZM,
+						rotYM,
+						translateM,
+					};
+
+					Matrix4x4 scaleRes = scaleM * Result;
+					Matrix4x4 rotXRes = rotXM * scaleRes;
+					Matrix4x4 rotZRes = rotZM * rotXRes;
+
+					Matrix4x4 rotYRes = rotYM * rotZRes;
+					Matrix4x4 transRes = translateM * rotYRes;
+
+					Result = transRes;
+
+					if (currentBone.raw.ParentIndex < 0)
+					{
+						break;
+					}
+
+
+					currentBone = allBones.at(currentBone.raw.ParentIndex);
+				} while (true);
+
+				gmtl::transpose(Result);
+
+				return Result;
+			}
+
+		};
+
+		Matrix4x4 worldMatrix = BoneWorldTransformHelper::GetWorldTransform(bone, skeletonBones);
+
+		//gmtl::setScale()
+
+		worldMatrix(3, 0) = -worldMatrix(3, 0);
+
 
 		boneWorldTransforms.emplace(bonePair.first, worldMatrix);
 	}
@@ -1061,6 +1071,17 @@ void ParseAnimations(FbxScene* scene, std::map<short, HkxBone>& animBones, const
 				{
 					globalBoneTransform = globalBoneTransform * localBoneTransforms[parentIndex];
 				}
+
+				//globalBoneTransform(3, 0) = -globalBoneTransform(3, 0);
+
+				gmtl::EulerAngleXYZd globalRot;
+
+				gmtl::set(globalRot, globalBoneTransform);
+
+				//globalRot[0] = -globalRot[0];
+				//globalRot[2] = -globalRot[2];
+
+				gmtl::setRot(globalBoneTransform, globalRot);
 
 				globalBoneTransforms.emplace(boneIndex, globalBoneTransform);
 			}
