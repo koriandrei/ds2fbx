@@ -13,6 +13,8 @@
 #include "gmtl/EulerAngleOps.h"
 #pragma warning(pop)
 
+typedef gmtl::Vec2d Vector2;
+
 typedef gmtl::Vec3d Vector3;
 typedef gmtl::Vec3i Vector3I;
 

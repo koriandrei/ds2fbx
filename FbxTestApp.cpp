@@ -9,10 +9,25 @@
 #include <algorithm>
 #include <cmath>
 #include <optional>
-#include <limits>
+//#include <limits>
 
 #include <args/args.hxx>
 #include "json/json.hpp"
+
+#define NOMINMAX
+
+#include "windows.h"
+
+#undef NOMINMAX
+#define _ITERATOR_DEBUG_LEVEL 0
+#include "grpcpp/grpcpp.h"
+#define _ITERATOR_DEBUG_LEVEL 2
+
+#include "souls/FLVER.grpc.pb.h"
+#include "souls/FLVER2.grpc.pb.h"
+#include "souls/HKX.pb.h"
+#include "souls/server.grpc.pb.h"
+
 #include <fbxsdk.h>
 
 #pragma warning(pop)
@@ -1200,13 +1215,63 @@ void ParseAnimations(FbxScene* scene, std::map<short, HkxBone>& animBones, const
 	}
 }
 
+void ExportMaterials(FbxScene* scene, const std::vector<Flver::Material>& materials, std::map<int, ParseMesh>& meshes)
+{
+	for (auto& meshPair : meshes)
+	{
+		ParseMesh& mesh = meshPair.second;
+		//mesh.raw.MaterialIndex;
+		FbxSurfaceLambert* mat = FbxSurfaceLambert::Create(scene, "Mat");
+
+		mesh.node->AddMaterial(mat);
+		FbxGeometryElementMaterial* materialElement = mesh.object->CreateElementMaterial();
+
+		//materialElement->GetIndexArray().Add()
+	}
+}
+
 int main(int argc, char* argv[])
 {
+	auto Stub = SOULS::Server::Server::NewStub(grpc::CreateChannel("localhost:50001", grpc::InsecureChannelCredentials()));
+	grpc::ClientContext context;
+	SOULS::Server::GetRequest Request;
+	*Request.mutable_path() = "chr/c1300.anibnd.dcx:a000_002000.hkx";
+	SOULS::Server::GetResponse response;
+
+	std::cout << "Requesting " << std::endl;
+
+
+	auto status = Stub->GetRpc(&context, Request, &response);
+
+	if (status.ok())
+	{
+
+		SOULS::HKX::HKASplineCompressedAnimation Bucket;
+
+		if (response.data().UnpackTo(&Bucket))
+		{
+
+			std::cout << "Received animation: duration " << Bucket.duration() << " framecount " << Bucket.framecount() << std::endl;
+		}
+		else
+		{
+			std::cout << "Unexpected data type" << std::endl;
+
+			return 3;
+		}
+	}
+	else
+	{
+		std::cout << "Error receiving bucket" << std::endl;
+	}
+	//response.data();
+
 	args::ArgumentParser parser("This is a DS to FBX model converter");
 	args::Flag shouldGenerateSkins(parser, "skin", "Should generate skins", { "skin", 's' });
 	args::Flag shouldGenerateMesh(parser, "mesh", "Should generate mesh", { "mesh", 'm' });
 	args::Flag shouldGenerateBones(parser, "bones", "Should generate bones", { "bones", 'b' });
-	args::Flag shouldExportAnimations(parser, "animations", "Should export animations", {"animations", "anims", 'a'});
+	args::Flag shouldExportAnimations(parser, "animations", "Should export animations", { "animations", "anims", 'a' });
+	args::Flag shouldExportMaterials(parser, "materials", "Should export materials", {"materials", "mat"});
 	args::ValueFlagList<std::string> animationNames(parser, "animation list", "Which animations to export?", {"animlist", "al"});
 	args::Flag shouldGenerateBindPose(parser, "bindpose", "Should calculate bind pose", {"bindpose", "bpose", "bp"});
 	args::ValueFlag<std::string> fbxExport(parser, "FBX export", "Is exporting required", { "export", 'e' }, "out.fbx");
@@ -1226,7 +1291,7 @@ int main(int argc, char* argv[])
 	}
 	catch (args::Error e)
 	{
-		std::cout << "An error occured while parsing args. " << e.what() << " Exiting..." << std::endl;
+		std::cout << "An error occurred while parsing args. " << e.what() << " Exiting..." << std::endl;
 		
 		return 1;
 	}
@@ -1299,7 +1364,6 @@ int main(int argc, char* argv[])
 
 	std::map<int, ParseMesh> meshes;
 
-
 	if (shouldGenerateMesh)
 	{
 		for (int meshIndex = 0; meshIndex < f.Meshes.size(); ++meshIndex)
@@ -1326,6 +1390,18 @@ int main(int argc, char* argv[])
 		std::cout << "Skipped mesh generation" << std::endl;
 	}
 	
+	if (shouldExportMaterials && shouldGenerateMesh)
+	{
+		ExportMaterials(scene, {}, meshes);
+	}
+	else
+	{
+		if (shouldGenerateMesh)
+		{
+			std::cout << "Cannot export materials without generating mesh" << std::endl;
+		}
+		std::cout << "Skipped materials export" << std::endl;
+	}
 
 	if (shouldGenerateMesh && shouldGenerateBones && shouldGenerateSkins)
 	{

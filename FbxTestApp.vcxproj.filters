@@ -188,6 +188,90 @@
     <ClCompile Include="Flver.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="H:\work\Infraworld2\Plugins\InfraworldRuntime\GrpcPrograms\Win64\gen\souls\BHD5.grpc.pb.cc">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="H:\work\Infraworld2\Plugins\InfraworldRuntime\GrpcPrograms\Win64\gen\souls\BHD5.pb.cc">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="H:\work\Infraworld2\Plugins\InfraworldRuntime\GrpcPrograms\Win64\gen\souls\Binder.grpc.pb.cc">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="H:\work\Infraworld2\Plugins\InfraworldRuntime\GrpcPrograms\Win64\gen\souls\Binder.pb.cc">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="H:\work\Infraworld2\Plugins\InfraworldRuntime\GrpcPrograms\Win64\gen\souls\BinderFile.grpc.pb.cc">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="H:\work\Infraworld2\Plugins\InfraworldRuntime\GrpcPrograms\Win64\gen\souls\BinderFile.pb.cc">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="H:\work\Infraworld2\Plugins\InfraworldRuntime\GrpcPrograms\Win64\gen\souls\BND4.grpc.pb.cc">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="H:\work\Infraworld2\Plugins\InfraworldRuntime\GrpcPrograms\Win64\gen\souls\BND4.pb.cc">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="H:\work\Infraworld2\Plugins\InfraworldRuntime\GrpcPrograms\Win64\gen\souls\Color.grpc.pb.cc">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="H:\work\Infraworld2\Plugins\InfraworldRuntime\GrpcPrograms\Win64\gen\souls\Color.pb.cc">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="H:\work\Infraworld2\Plugins\InfraworldRuntime\GrpcPrograms\Win64\gen\souls\DCX.grpc.pb.cc">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="H:\work\Infraworld2\Plugins\InfraworldRuntime\GrpcPrograms\Win64\gen\souls\DCX.pb.cc">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="H:\work\Infraworld2\Plugins\InfraworldRuntime\GrpcPrograms\Win64\gen\souls\FLVER.grpc.pb.cc">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="H:\work\Infraworld2\Plugins\InfraworldRuntime\GrpcPrograms\Win64\gen\souls\FLVER.pb.cc">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="H:\work\Infraworld2\Plugins\InfraworldRuntime\GrpcPrograms\Win64\gen\souls\FLVER2.grpc.pb.cc">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="H:\work\Infraworld2\Plugins\InfraworldRuntime\GrpcPrograms\Win64\gen\souls\FLVER2.pb.cc">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="H:\work\Infraworld2\Plugins\InfraworldRuntime\GrpcPrograms\Win64\gen\souls\HKX.grpc.pb.cc">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="H:\work\Infraworld2\Plugins\InfraworldRuntime\GrpcPrograms\Win64\gen\souls\HKX.pb.cc">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="H:\work\Infraworld2\Plugins\InfraworldRuntime\GrpcPrograms\Win64\gen\souls\server.grpc.pb.cc">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="H:\work\Infraworld2\Plugins\InfraworldRuntime\GrpcPrograms\Win64\gen\souls\server.pb.cc">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="H:\work\Infraworld2\Plugins\InfraworldRuntime\GrpcPrograms\Win64\gen\souls\Souls.grpc.pb.cc">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="H:\work\Infraworld2\Plugins\InfraworldRuntime\GrpcPrograms\Win64\gen\souls\Souls.pb.cc">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="H:\work\Infraworld2\Plugins\InfraworldRuntime\GrpcPrograms\Win64\gen\souls\Vector2.grpc.pb.cc">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="H:\work\Infraworld2\Plugins\InfraworldRuntime\GrpcPrograms\Win64\gen\souls\Vector2.pb.cc">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="H:\work\Infraworld2\Plugins\InfraworldRuntime\GrpcPrograms\Win64\gen\souls\Vector3.grpc.pb.cc">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="H:\work\Infraworld2\Plugins\InfraworldRuntime\GrpcPrograms\Win64\gen\souls\Vector3.pb.cc">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="H:\work\Infraworld2\Plugins\InfraworldRuntime\GrpcPrograms\Win64\gen\souls\Vector4.grpc.pb.cc">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="H:\work\Infraworld2\Plugins\InfraworldRuntime\GrpcPrograms\Win64\gen\souls\Vector4.pb.cc">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <None Include="gmtl\gmtl.doxygen">

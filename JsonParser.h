@@ -25,6 +25,16 @@ namespace gmtl
 		val = Vector3(x, y, z);
 	}
 
+	inline void from_json(const json& j, Vector2& val)
+	{
+		double x, y;
+
+		j.at("X").get_to(x);
+		j.at("Y").get_to(y);
+
+		val = Vector2(x, y);
+	}
+
 	inline void from_json(const json& j, Vector4& val)
 	{
 		double x, y, z, w;
@@ -374,6 +384,29 @@ namespace Hkx
 
 namespace Flver
 {
+	inline void from_json(const json& j, Texture& val)
+	{
+		JSON_FROM(Type);
+		JSON_FROM(Path);
+		JSON_FROM(Scale);
+		JSON_FROM(Unk10);
+		JSON_FROM(Unk11);
+		JSON_FROM(Unk14);
+		JSON_FROM(Unk18);
+		JSON_FROM(Unk1C);
+	}
+
+	inline void from_json(const json& j, Material& val)
+	{
+		JSON_FROM(Name);
+		JSON_FROM(MTD);
+		JSON_FROM(Flags);
+		JSON_FROM(Textures);
+		JSON_FROM(GXIndex);
+		JSON_FROM(Unk18);
+	}
+
+
 	inline void from_json(const json& j, FaceSet& val)
 	{
 		JSON_FROM(TriangleStrip);
@@ -449,6 +482,7 @@ namespace Flver
 	{
 		JSON_FROM(Meshes);
 		JSON_FROM(Bones);
+		JSON_FROM(Materials);
 	}
 }
 
