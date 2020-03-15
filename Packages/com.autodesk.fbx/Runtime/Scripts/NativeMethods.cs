@@ -215,13 +215,13 @@ class NativeMethods {
   private static int InitFbxAllocators()
   {
       int result = -1;
-      bool verbose = true; // UnityEngine.Debug.unityLogger.logEnabled;
+            bool verbose = true; // UnityEngine.Debug.unityLogger.logEnabled;
       result = _InitFbxAllocators();
 
       if (result!=1 && verbose)
       {
-                System.Console.WriteLine("Failed to configure FbxSdk memory allocators.");
             //UnityEngine.Debug.LogError("Failed to configure FbxSdk memory allocators.");
+            System.Console.WriteLine("Failed to configure FbxSdk memory allocators.");
       }
 
       return result;
@@ -251,7 +251,7 @@ class NativeMethods {
 #elif UNITY_EDITOR_LINUX
   const string DllImportName = "Packages/com.autodesk.fbx/Linux/UnityFbxSdkNative.so";
 #elif UNITY_EDITOR_WIN
-  const string DllImportName = "G:/work/Ds3FbxSharp/Packages/com.autodesk.fbx/Windows/UnityFbxSdkNative.dll";
+  const string DllImportName = "Packages/com.autodesk.fbx/Runtime/Plugins/x86_64/UnityFbxSdkNative.dll";
 #else
   #error "FbxSdk: C# bindings for this platform haven't been implemented yet, sorry."
   const string DllImportName = "UnityFbxSdkNative";
@@ -2836,6 +2836,9 @@ class NativeMethods {
   [global::System.Runtime.InteropServices.DllImport(DllImportName, EntryPoint="CSharp_AutodeskfFbx_FbxMesh_GetPolygonVertexCount___")]
   public static extern int FbxMesh_GetPolygonVertexCount(global::System.Runtime.InteropServices.HandleRef jarg1);
 
+  [global::System.Runtime.InteropServices.DllImport(DllImportName, EntryPoint="CSharp_AutodeskfFbx_FbxMesh_BuildMeshEdgeArray___")]
+  public static extern void FbxMesh_BuildMeshEdgeArray(global::System.Runtime.InteropServices.HandleRef jarg1);
+
   [global::System.Runtime.InteropServices.DllImport(DllImportName, EntryPoint="CSharp_AutodeskfFbx_FbxGlobalSettings_Create__SWIG_0___")]
   public static extern global::System.IntPtr FbxGlobalSettings_Create__SWIG_0(global::System.Runtime.InteropServices.HandleRef jarg1, string jarg2);
 
@@ -4325,6 +4328,21 @@ class NativeMethods {
 
   [global::System.Runtime.InteropServices.DllImport(DllImportName, EntryPoint="CSharp_AutodeskfFbx_FbxConstraintScale_SetConstrainedObject___")]
   public static extern void FbxConstraintScale_SetConstrainedObject(global::System.Runtime.InteropServices.HandleRef jarg1, global::System.Runtime.InteropServices.HandleRef jarg2);
+
+  [global::System.Runtime.InteropServices.DllImport(DllImportName, EntryPoint="CSharp_AutodeskfFbx_FbxGeometryConverter_ComputeEdgeSmoothingFromNormals___")]
+  public static extern bool FbxGeometryConverter_ComputeEdgeSmoothingFromNormals(global::System.Runtime.InteropServices.HandleRef jarg1, global::System.Runtime.InteropServices.HandleRef jarg2);
+
+  [global::System.Runtime.InteropServices.DllImport(DllImportName, EntryPoint="CSharp_AutodeskfFbx_FbxGeometryConverter_ComputePolygonSmoothingFromEdgeSmoothing__SWIG_0___")]
+  public static extern bool FbxGeometryConverter_ComputePolygonSmoothingFromEdgeSmoothing__SWIG_0(global::System.Runtime.InteropServices.HandleRef jarg1, global::System.Runtime.InteropServices.HandleRef jarg2, int jarg3);
+
+  [global::System.Runtime.InteropServices.DllImport(DllImportName, EntryPoint="CSharp_AutodeskfFbx_FbxGeometryConverter_ComputePolygonSmoothingFromEdgeSmoothing__SWIG_1___")]
+  public static extern bool FbxGeometryConverter_ComputePolygonSmoothingFromEdgeSmoothing__SWIG_1(global::System.Runtime.InteropServices.HandleRef jarg1, global::System.Runtime.InteropServices.HandleRef jarg2);
+
+  [global::System.Runtime.InteropServices.DllImport(DllImportName, EntryPoint="CSharp_AutodeskfFbx_new_FbxGeometryConverter___")]
+  public static extern global::System.IntPtr new_FbxGeometryConverter(global::System.Runtime.InteropServices.HandleRef jarg1);
+
+  [global::System.Runtime.InteropServices.DllImport(DllImportName, EntryPoint="CSharp_AutodeskfFbx_delete_FbxGeometryConverter___")]
+  public static extern void delete_FbxGeometryConverter(global::System.Runtime.InteropServices.HandleRef jarg1);
 
   [global::System.Runtime.InteropServices.DllImport(DllImportName, EntryPoint="CSharp_AutodeskfFbx_FbxPropertyBool_SWIGUpcast___")]
   public static extern global::System.IntPtr FbxPropertyBool_SWIGUpcast(global::System.IntPtr jarg1);

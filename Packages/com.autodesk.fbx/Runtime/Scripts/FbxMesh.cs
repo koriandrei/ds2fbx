@@ -68,6 +68,11 @@ public class FbxMesh : FbxGeometry {
     return ret;
   }
 
+  public void BuildMeshEdgeArray() {
+    NativeMethods.FbxMesh_BuildMeshEdgeArray(swigCPtr);
+    if (NativeMethods.SWIGPendingException.Pending) throw NativeMethods.SWIGPendingException.Retrieve();
+  }
+
   public override int GetHashCode(){
       return swigCPtr.Handle.GetHashCode();
   }

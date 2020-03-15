@@ -26,6 +26,9 @@
     <None Update="libfbxsdk.dll">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
+    <None Update="Packages\com.autodesk.fbx\Runtime\Plugins\x86_64\UnityFbxSdkNative.dll">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
     <None Update="Packages\com.autodesk.fbx\Windows\UnityFbxSdkNative.dll">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>

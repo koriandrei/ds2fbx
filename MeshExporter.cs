@@ -149,6 +149,12 @@ namespace Ds3FbxSharp
                 }
             }
 
+            mesh.BuildMeshEdgeArray();
+
+            FbxGeometryConverter converter = new FbxGeometryConverter(Scene.GetFbxManager());
+            converter.ComputeEdgeSmoothingFromNormals(mesh);
+            converter.ComputePolygonSmoothingFromEdgeSmoothing(mesh);
+
             return mesh;
         }
     }
