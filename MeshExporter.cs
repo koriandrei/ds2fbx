@@ -10,11 +10,17 @@ namespace Ds3FbxSharp
 {
     public static class FbxConversions
     {
-        public static FbxVector4 ToFbx(this Vector3 vector)
+        public static FbxVector4 ToFbxVector4(this Vector3 vector)
         {
             return new FbxVector4(vector.X, vector.Y, vector.Z);
         }
-        public static FbxVector2 ToFbx(this Vector2 vector)
+
+        public static FbxDouble3 ToFbxDouble3(this Vector3 vector)
+        {
+            return new FbxDouble3(vector.X, vector.Y, vector.Z);
+        }
+
+        public static FbxVector2 ToFbxVector2(this Vector2 vector)
         {
             return new FbxVector2(vector.X, vector.Y);
         }
@@ -53,7 +59,7 @@ namespace Ds3FbxSharp
         public static FbxNode CreateNode(this FbxNodeAttribute nodeAttribute)
         {
             FbxNode node = FbxNode.Create(nodeAttribute, nodeAttribute.GetName() + "_Node");
-
+            
             node.SetNodeAttribute(nodeAttribute);
 
             return node;
@@ -62,6 +68,15 @@ namespace Ds3FbxSharp
         public static FbxExportData<TSoulsData, TFbxData> CreateExportData<TSoulsData, TFbxData>(this TFbxData fbxData, TSoulsData soulsData) where TFbxData: FbxNodeAttribute
         {
             return new FbxExportData<TSoulsData, TFbxData>(soulsData, fbxData, fbxData.CreateNode());
+        }
+
+        public static FbxExportData<TSoulsData, TFbxData> CreateExportDataWithScene<TSoulsData, TFbxData>(this TFbxData fbxData, TSoulsData soulsData, FbxScene scene) where TFbxData: FbxNodeAttribute
+        {
+            FbxNode node = FbxNode.Create(scene, fbxData.GetName() + "_Node");
+
+            node.SetNodeAttribute(fbxData);
+
+            return new FbxExportData<TSoulsData, TFbxData>(soulsData, fbxData, node);
         }
     }
 
@@ -117,7 +132,7 @@ namespace Ds3FbxSharp
 
                 Vector3 position = vertex.Position;
                 
-                normal.GetDirectArray().Add(vertex.Normal.ToFbx());
+                normal.GetDirectArray().Add(vertex.Normal.ToFbxVector4());
 
                 tangent.GetDirectArray().Add(new FbxVector4(vertex.Tangents[0].X, vertex.Tangents[0].Y, vertex.Tangents[0].Z));
 
@@ -129,9 +144,9 @@ namespace Ds3FbxSharp
                     uvValue.Y = vertex.UVs[0].Y;
                 }
 
-                uv.GetDirectArray().Add(uvValue.ToFbx());
+                uv.GetDirectArray().Add(uvValue.ToFbxVector2());
 
-                mesh.SetControlPointAt(position.ToFbx(), vertexIndex);
+                mesh.SetControlPointAt(position.ToFbxVector4(), vertexIndex);
             }
 
             for (int faceSetIndex = 0; faceSetIndex < Souls.mesh.FaceSets.Count; ++faceSetIndex)
