@@ -24,6 +24,33 @@ namespace Ds3FbxSharp
         {
             return new FbxVector2(vector.X, vector.Y);
         }
+
+
+
+
+        public static Vector3 QuaternionToEuler(this Quaternion q)
+        {
+            Vector3 angles = new Vector3();
+
+
+            float sinr_cosp = 2 * (q.W * q.X + q.Y * q.Z);
+            float cosr_cosp = 1 - 2 * (q.X * q.X + q.Y * q.Y);
+            angles.X = (float)Math.Atan2(sinr_cosp, cosr_cosp);
+
+            // pitch (y-axis rotation)
+            float sinp = 2 * (q.W * q.Y - q.Z * q.X);
+            if (Math.Abs(sinp) >= 1)
+                angles.Y = (float)Math.CopySign(Math.PI / 2, sinp); // use 90 degrees if out of range
+            else
+                angles.Y = (float)Math.Asin(sinp);
+
+            // yaw (z-axis rotation)
+            float siny_cosp = 2 * (q.W * q.Z + q.X * q.Y);
+            float cosy_cosp = 1 - 2 * (q.Y * q.Y + q.Z * q.Z);
+            angles.Z = (float)Math.Atan2(siny_cosp, cosy_cosp);
+
+            return angles * 180 / (float)Math.PI;
+        }
     }
 
     public class FbxExportData<TSoulsData, TFbxData>
@@ -131,6 +158,10 @@ namespace Ds3FbxSharp
                 FLVER.Vertex vertex = Souls.mesh.Vertices[vertexIndex];
 
                 Vector3 position = vertex.Position;
+
+                // this fixes vertex positions since otherwise the model is turned inside out
+                // and it appears like it holds weapons in the left hand
+                position.X = -position.X;
                 
                 normal.GetDirectArray().Add(vertex.Normal.ToFbxVector4());
 
@@ -160,7 +191,16 @@ namespace Ds3FbxSharp
 
                 for (int faceStartIndex = 0; faceStartIndex < faceSet.Indices.Count; faceStartIndex += 3)
                 {
-                    mesh.AddCompletePolygon(faceSet.Indices[faceStartIndex], faceSet.Indices[faceStartIndex + 1], faceSet.Indices[faceStartIndex + 2]);
+                    mesh.AddCompletePolygon(
+                        faceSet.Indices[faceStartIndex], 
+                        faceSet.Indices[faceStartIndex + 1], 
+                        faceSet.Indices[faceStartIndex + 2]
+                    );
+                    //mesh.AddCompletePolygon(
+                    //    faceSet.Indices[faceStartIndex + 2],
+                    //    faceSet.Indices[faceStartIndex + 1],
+                    //    faceSet.Indices[faceStartIndex]
+                    //);
                 }
             }
 

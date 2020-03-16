@@ -19,7 +19,14 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\dks\tools\DSAnimStudio\DSAnimStudio\DSAnimStudio.csproj" />
     <ProjectReference Include="..\dks\tools\SoulsFormats\SoulsFormats\SoulsFormats.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Reference Include="MonoGame.Framework">
+      <HintPath>..\dks\tools\DSAnimStudio\Lib\MonoGame.Framework.dll</HintPath>
+    </Reference>
   </ItemGroup>
 
   <ItemGroup>

@@ -69,11 +69,13 @@ namespace Ds3FbxSharp
                 //.First()
                 ;
 
-            FLVER2 flver = fileLookup[ModelDataType.Flver].Select(FLVER2.Read).Single();
+            FLVER2 flver = fileLookup[ModelDataType.Flver].Select(FLVER2.Read).First();
 
             var skeletons = fileLookup[ModelDataType.Hkx].Select(HKX.Read).SelectMany(hkx => hkx.DataSection.Objects).Where(hkxObject => hkxObject is HKX.HKASkeleton).Select(hkxObject => (HKX.HKASkeleton)hkxObject);
 
-            HKX.HKASkeleton hkaSkeleton = skeletons.First();
+            HKX.HKASkeleton hkaSkeleton = skeletons.FirstOrDefault();
+
+            //DSAnimStudio.NewHavokAnimation_SplineCompressed
 
             FbxManager m = FbxManager.Create();
 
@@ -91,7 +93,7 @@ namespace Ds3FbxSharp
                 sceneRoot.AddChild(exportedMesh.FbxNode);
             }
 
-            var bones = SkeletonFixup.FixupDsBones(flver, hkaSkeleton).ToList();
+            var bones = hkaSkeleton == null ? SkeletonFixup.FixupDsBones(flver).ToList() : SkeletonFixup.FixupDsBones(flver, hkaSkeleton).ToList();
 
             DsSkeleton skeleton = new SkeletonExporter(scene, flver, bones).ParseSkeleton();
 

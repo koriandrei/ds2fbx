@@ -12,6 +12,8 @@ namespace Ds3FbxSharp
     {
         public DsBone(FLVER.Bone flverBone, FLVER2 flver)
         {
+            HkxBoneIndex = -1;
+
             Name = flverBone.Name;
 
             ParentName = flverBone.ParentIndex > 0 ? flver.Bones[flverBone.ParentIndex].Name : null;
@@ -19,9 +21,9 @@ namespace Ds3FbxSharp
 
         public DsBone(FLVER.Bone flverBone, FLVER2 flver, HKX.Bone hkxBone, HKX.HKASkeleton hkaSkeleton) : this(flverBone, flver)
         {
-            int hkxBoneIndex = hkaSkeleton.Bones.GetArrayData().Elements.IndexOf(hkxBone);
+            HkxBoneIndex = hkaSkeleton.Bones.GetArrayData().Elements.IndexOf(hkxBone);
 
-            short hkxParentBoneIndex = hkaSkeleton.ParentIndices.GetArrayData().Elements[hkxBoneIndex].data;
+            short hkxParentBoneIndex = hkaSkeleton.ParentIndices.GetArrayData().Elements[HkxBoneIndex].data;
 
             if (hkxParentBoneIndex >= 0)
             {
@@ -34,6 +36,8 @@ namespace Ds3FbxSharp
         public string Name { get; }
 
         public string ParentName { get; }
+
+        public int HkxBoneIndex { get; }
     }
 
 

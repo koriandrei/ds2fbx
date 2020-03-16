@@ -97,31 +97,6 @@ namespace Ds3FbxSharp
             return localTransform;
         }
 
-
-        private static Vector3 QuaternionToEuler(Quaternion q)
-        {
-            Vector3 angles = new Vector3();
-
-
-            float sinr_cosp = 2 * (q.W * q.X + q.Y * q.Z);
-            float cosr_cosp = 1 - 2 * (q.X * q.X + q.Y * q.Y);
-            angles.X = (float) Math.Atan2(sinr_cosp, cosr_cosp);
-
-            // pitch (y-axis rotation)
-            float sinp = 2 * (q.W * q.Y - q.Z * q.X);
-            if (Math.Abs(sinp) >= 1)
-                angles.Y = (float) Math.CopySign(Math.PI / 2, sinp); // use 90 degrees if out of range
-            else
-                angles.Y = (float) Math.Asin(sinp);
-
-            // yaw (z-axis rotation)
-            float siny_cosp = 2 * (q.W * q.Z + q.X * q.Y);
-            float cosy_cosp = 1 - 2 * (q.Y * q.Y + q.Z * q.Z);
-            angles.Z = (float)Math.Atan2(siny_cosp, cosy_cosp);
-
-            return angles * 180 / (float) Math.PI;
-        }
-
         public DsSkeleton ParseSkeleton()
         {
             List<DsBoneData> boneDatas = bones.Select(
@@ -176,7 +151,7 @@ namespace Ds3FbxSharp
                 {
                     boneData.exportData.FbxNode.LclTranslation.Set(translation.ToFbxDouble3());
 
-                    Vector3 euler = QuaternionToEuler(rotation);
+                    Vector3 euler = rotation.QuaternionToEuler();
 
                     boneData.exportData.FbxNode.LclRotation.Set(euler.ToFbxDouble3());
 
