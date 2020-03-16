@@ -71,10 +71,9 @@ namespace Ds3FbxSharp
 
             FLVER2 flver = fileLookup[ModelDataType.Flver].Select(FLVER2.Read).Single();
 
-            HKX hkx = fileLookup[ModelDataType.Hkx].Select(HKX.Read).First();
+            var skeletons = fileLookup[ModelDataType.Hkx].Select(HKX.Read).SelectMany(hkx => hkx.DataSection.Objects).Where(hkxObject => hkxObject is HKX.HKASkeleton).Select(hkxObject => (HKX.HKASkeleton)hkxObject);
 
-            HKX.HKASkeleton hkaSkeleton = (HKX.HKASkeleton)hkx.DataSection.Objects.Single(hkaObject => hkaObject is HKX.HKASkeleton);
-
+            HKX.HKASkeleton hkaSkeleton = skeletons.First();
 
             FbxManager m = FbxManager.Create();
 
