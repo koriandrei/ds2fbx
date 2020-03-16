@@ -50,7 +50,15 @@ namespace Ds3FbxSharp
             //    .First();
 
             /*FLVER2 flver =*/
-            var fileLookup = System.IO.Directory.GetFiles(@"G:\SteamLibrary\steamapps\common\DARK SOULS III\Game\chr\", "*1300*")
+
+            string charToLookFor = "1300";
+
+            if (args.Length > 0)
+            {
+                charToLookFor = args[0];
+            }
+
+            var fileLookup = System.IO.Directory.GetFiles(@"G:\SteamLibrary\steamapps\common\DARK SOULS III\Game\chr\", string.Format(System.Globalization.CultureInfo.InvariantCulture, "*{0}*bnd.dcx", charToLookFor))
                 .Select(path => new BND4Reader(path))
                 .SelectMany(bndReader => bndReader.Files.Select(file => bndReader.ReadFile(file)))
                 //.GroupBy(fileContents=>GetModelDataType(fileContents))
@@ -114,7 +122,7 @@ namespace Ds3FbxSharp
 
             using (FbxExporter ex = FbxExporter.Create(m, "Exporter"))
             {
-                ex.Initialize("out.fbx");
+                ex.Initialize(charToLookFor + "_out.fbx");
 
                 Console.WriteLine(ex.Export(scene));
             }
