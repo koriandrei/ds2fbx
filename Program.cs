@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Generic;
 using Autodesk.Fbx;
 using SoulsFormats;
 using System.Linq;
@@ -38,6 +39,11 @@ namespace Ds3FbxSharp
             }
         }
 
+        static IEnumerable<T> GetHkxObjects<T>(IEnumerable<HKX> hkxs) where T: HKX.HKXObject
+        {
+            return hkxs.SelectMany(hkx => hkx.DataSection.Objects).Where(hkxObject => hkxObject is T).Select(hkxObject => (T)hkxObject);
+        }
+
         static void Main(string[] args)
         {
             //var reader = new SoulsFormats.BXF4Reader(@"G:\SteamLibrary\steamapps\common\DARK SOULS III\Game\Data1.bhd", @"G:\SteamLibrary\steamapps\common\DARK SOULS III\Game\Data1.bdt");
@@ -70,16 +76,19 @@ namespace Ds3FbxSharp
                 ;
 
             FLVER2 flver = fileLookup[ModelDataType.Flver].Select(FLVER2.Read).First();
-
-            var skeletons = fileLookup[ModelDataType.Hkx].Select(HKX.Read).SelectMany(hkx => hkx.DataSection.Objects).Where(hkxObject => hkxObject is HKX.HKASkeleton).Select(hkxObject => (HKX.HKASkeleton)hkxObject);
+            var hkxs = fileLookup[ModelDataType.Hkx].Select(HKX.Read);
+            var skeletons = GetHkxObjects<HKX.HKASkeleton>(hkxs);
 
             HKX.HKASkeleton hkaSkeleton = skeletons.FirstOrDefault();
 
-            //DSAnimStudio.NewHavokAnimation_SplineCompressed
 
+            HKX.HKAAnimationBinding binding = GetHkxObjects<HKX.HKAAnimationBinding>(hkxs).First();
+            
             FbxManager m = FbxManager.Create();
 
             FbxScene scene = FbxScene.Create(m, "BlackKnight");
+
+
 
             FbxNode sceneRoot = scene.GetRootNode();
 
@@ -118,6 +127,21 @@ namespace Ds3FbxSharp
 
                 scene.AddPose(pose);
             }
+
+            var animStack = FbxAnimStack.Create(scene, "AnimStack");
+
+            GetHkxObjects<HKX.HKASplineCompressedAnimation>(hkxs).Take(10).Select(animation =>
+            {
+                DSAnimStudio.NewHavokAnimation_SplineCompressedData anim = new DSAnimStudio.NewHavokAnimation_SplineCompressedData(animation, hkaSkeleton, binding);
+
+                var animExporter = new AnimationExporter(scene, new AnimationExportData() { dsAnimation = anim, hkaAnimationBinding = binding, skeleton = skeleton, name = anim.Name, animStack = animStack });
+
+                var dummy = animExporter.Fbx;
+
+                return dummy;
+
+            }).ToList();
+
 
             PrintFbxNode(sceneRoot);
 

@@ -12,15 +12,17 @@ namespace Ds3FbxSharp
 {
     class AnimationExportData
     {
-        public DSAnimStudio.NewHavokAnimation_SplineCompressed dsAnimation;
+        public DSAnimStudio.NewHavokAnimation_SplineCompressedData dsAnimation;
 
-        public HKX.HKASplineCompressedAnimation hkaAnimation;
+        //public HKX.HKASplineCompressedAnimation hkaAnimation;
 
         public HKX.HKAAnimationBinding hkaAnimationBinding;
 
         public DsSkeleton skeleton;
 
         public string name;
+
+        public FbxAnimStack animStack;
     }
 
     class AnimationExporter : Exporter<AnimationExportData, FbxAnimStack>
@@ -90,13 +92,11 @@ namespace Ds3FbxSharp
 
         protected override FbxAnimStack GenerateFbx()
         {
-            FbxAnimStack animStack = FbxAnimStack.Create(Scene, Souls.name + "_AnimStack");
+            FbxAnimLayer animLayer = FbxAnimLayer.Create(Souls.animStack, "Layer0");
 
-            FbxAnimLayer animLayer = FbxAnimLayer.Create(animStack, "Layer0");
+            Souls.animStack.AddMember(animLayer);
 
-            animStack.AddMember(animLayer);
-
-            DSAnimStudio.NewHavokAnimation_SplineCompressed anim = Souls.dsAnimation;
+            DSAnimStudio.NewHavokAnimation_SplineCompressedData anim = Souls.dsAnimation;
 
             IDictionary<int, short> hkaTrackToHkaBoneIndex = new Dictionary<int, short>();
 
@@ -122,7 +122,7 @@ namespace Ds3FbxSharp
                 );
             }
 
-            for (int frameIndex = 0; frameIndex < Souls.hkaAnimation.FrameCount; ++frameIndex)
+            for (int frameIndex = 0; frameIndex < Souls.dsAnimation.FrameCount; ++frameIndex)
             {
                 FbxTime time = FbxTime.FromFrame(frameIndex);
 
@@ -130,13 +130,13 @@ namespace Ds3FbxSharp
 
                 int blockIndex = (int)(Math.Floor(((double)frameInBlockIndex) / anim.NumFramesPerBlock));
 
-                anim.CurrentTime = frameIndex * anim.FrameDuration;
-
                 foreach (var bone in Souls.skeleton.boneDatas)
                 {
                     int hkxBoneIndex = bone.exportData.SoulsData.HkxBoneIndex;
 
-                    DSAnimStudio.NewBlendableTransform newBlendableTransform = anim.GetBlendableTransformOnCurrentFrame(hkxBoneIndex);
+                    int transformTrack = anim.HkxBoneIndexToTransformTrackMap[hkxBoneIndex];
+
+                    DSAnimStudio.NewBlendableTransform newBlendableTransform = anim.GetTransformOnSpecificBlockAndFrame(transformTrack, blockIndex, frameIndex);
 
                     AnimExportHelper animExportHelper = boneHelpers[hkxBoneIndex];
 
@@ -153,7 +153,7 @@ namespace Ds3FbxSharp
                 helper.scale.Finish();
             }
 
-            return animStack;
+            return null;
         }
     }
 }
