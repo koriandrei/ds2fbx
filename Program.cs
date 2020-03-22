@@ -65,8 +65,17 @@ namespace Ds3FbxSharp
             }
 
             var fileLookup = System.IO.Directory.GetFiles(@"G:\SteamLibrary\steamapps\common\DARK SOULS III\Game\chr\", string.Format(System.Globalization.CultureInfo.InvariantCulture, "*{0}*bnd.dcx", charToLookFor))
+                .Concat(System.IO.Directory.GetFiles(@"G:\SteamLibrary\steamapps\common\DARK SOULS III\Game\parts\", "bd_m_*bnd.dcx"))
                 .Select(path => new BND4Reader(path))
-                .SelectMany(bndReader => bndReader.Files.Select(file => bndReader.ReadFile(file)))
+                .SelectMany(bndReader => bndReader.Files.Where(file=>{
+                    if (file.Name.EndsWith("hkx"))
+                    {
+                        bool isAnimHkx = file.Name.Substring(file.Name.LastIndexOf("\\") + 1).StartsWith("a20");
+
+                        return isAnimHkx;
+                    }
+                    return true;
+                }).Select(file => bndReader.ReadFile(file)))
                 //.GroupBy(fileContents=>GetModelDataType(fileContents))
                 //.ToDictionary()
                 .ToLookup(GetModelDataType)
@@ -75,7 +84,7 @@ namespace Ds3FbxSharp
                 //.First()
                 ;
 
-            FLVER2 flver = fileLookup[ModelDataType.Flver].Select(FLVER2.Read).First();
+            FLVER2 flver = fileLookup[ModelDataType.Flver].Select(FLVER2.Read).Where(flver=>flver.Meshes.Count > 0).ElementAt(1);
             var hkxs = fileLookup[ModelDataType.Hkx].Select(HKX.Read);
             var skeletons = GetHkxObjects<HKX.HKASkeleton>(hkxs);
 
@@ -83,7 +92,7 @@ namespace Ds3FbxSharp
 
 
             HKX.HKAAnimationBinding binding = GetHkxObjects<HKX.HKAAnimationBinding>(hkxs).First();
-            
+
             FbxManager m = FbxManager.Create();
 
             FbxScene scene = FbxScene.Create(m, "BlackKnight");
@@ -92,27 +101,31 @@ namespace Ds3FbxSharp
 
             FbxNode sceneRoot = scene.GetRootNode();
 
-            var meshes = flver.Meshes.Select(mesh => new MeshExportData() { mesh = mesh, meshRoot = flver.Bones[mesh.DefaultBoneIndex] })
+            var meshes = flver?.Meshes.Select(mesh => new MeshExportData() { mesh = mesh, meshRoot = flver.Bones[mesh.DefaultBoneIndex] })
                 .Select(meshExportData => new MeshExporter(scene, meshExportData))
                 .Select(exporter => exporter.Fbx.CreateExportData(exporter.Souls))
                 .ToList();
-            
-            foreach (var exportedMesh in meshes)
+
+            if (meshes != null)
             {
-                sceneRoot.AddChild(exportedMesh.FbxNode);
+                foreach (var exportedMesh in meshes)
+                {
+                    sceneRoot.AddChild(exportedMesh.FbxNode);
+                }
             }
 
-            var bones = hkaSkeleton == null ? SkeletonFixup.FixupDsBones(flver).ToList() : SkeletonFixup.FixupDsBones(flver, hkaSkeleton).ToList();
+            List<DsBone> bones = SkeletonFixup.FixupDsBones(flver, hkaSkeleton).ToList();
 
             DsSkeleton skeleton = new SkeletonExporter(scene, flver, bones).ParseSkeleton();
 
-            sceneRoot.AddChild(skeleton.SkeletonRootNode);
-
-            foreach (var meshData in meshes)
+            if (meshes != null)
             {
-                FbxSkin generatedSkin = new SkinExporter(meshData.FbxData, new SkinExportData(meshData.SoulsData, skeleton, flver)).Fbx;
-                meshData.FbxData.AddDeformer(generatedSkin);
-            };
+                foreach (var meshData in meshes)
+                {
+                    FbxSkin generatedSkin = new SkinExporter(meshData.FbxData, new SkinExportData(meshData.SoulsData, skeleton, flver)).Fbx;
+                    meshData.FbxData.AddDeformer(generatedSkin);
+                };
+            }
 
             {
                 FbxPose pose = FbxPose.Create(scene, "Pose");
@@ -128,20 +141,26 @@ namespace Ds3FbxSharp
                 scene.AddPose(pose);
             }
 
-            var animStack = FbxAnimStack.Create(scene, "AnimStack");
-
-            GetHkxObjects<HKX.HKASplineCompressedAnimation>(hkxs).Take(10).Select(animation =>
+            Func<HKX.HKASplineCompressedAnimation, int, bool> b = ((animation, animIndex) =>
             {
                 DSAnimStudio.NewHavokAnimation_SplineCompressedData anim = new DSAnimStudio.NewHavokAnimation_SplineCompressedData(animation, hkaSkeleton, binding);
 
-                var animExporter = new AnimationExporter(scene, new AnimationExportData() { dsAnimation = anim, hkaAnimationBinding = binding, skeleton = skeleton, name = anim.Name, animStack = animStack });
+                var animExporter = new AnimationExporter(scene, new AnimationExportData() { dsAnimation = anim, hkaAnimationBinding = binding, skeleton = skeleton, name = animIndex.ToString() });
 
                 var dummy = animExporter.Fbx;
 
-                return dummy;
+                return dummy == null;
 
-            }).ToList();
+            });
 
+            var animations11 = GetHkxObjects<HKX.HKASplineCompressedAnimation>(hkxs).Take(5).ToList();
+
+            int maxAnimCount = 100;
+
+            for (int i = 0; i< animations11.Count && i < maxAnimCount; ++i)
+            {
+                b(animations11[i], i);
+            }
 
             PrintFbxNode(sceneRoot);
 

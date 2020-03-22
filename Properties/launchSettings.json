@@ -1,0 +1,8 @@
+{
+  "profiles": {
+    "Ds3FbxSharp": {
+      "commandName": "Project",
+      "commandLineArgs": "c0000"
+    }
+  }
+}

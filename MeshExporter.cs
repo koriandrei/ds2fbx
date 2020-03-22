@@ -161,8 +161,8 @@ namespace Ds3FbxSharp
 
                 // this fixes vertex positions since otherwise the model is turned inside out
                 // and it appears like it holds weapons in the left hand
-                position.X = -position.X;
-                
+                //position.Z = -position.Z;
+
                 normal.GetDirectArray().Add(vertex.Normal.ToFbxVector4());
 
                 tangent.GetDirectArray().Add(new FbxVector4(vertex.Tangents[0].X, vertex.Tangents[0].Y, vertex.Tangents[0].Z));

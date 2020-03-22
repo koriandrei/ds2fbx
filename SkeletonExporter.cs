@@ -129,9 +129,16 @@ namespace Ds3FbxSharp
             {
                 Matrix4x4 globalTransform = CalculateGlobalTransform(boneData.flverBone, Flver);
 
+                var hackFixupMatrix = Matrix4x4.CreateScale(new Vector3(1, 1, 1));
+
+                globalTransform *= hackFixupMatrix;
+
                 if (boneData.parent != null)
                 {
                     Matrix4x4 globalParentTransform = CalculateGlobalTransform(boneData.parent.flverBone, Flver);
+                    
+                    globalParentTransform *= hackFixupMatrix;
+
                     Matrix4x4 invertedGlobalParentTransform;
                     if (Matrix4x4.Invert(globalParentTransform, out invertedGlobalParentTransform))
                     {
@@ -164,16 +171,16 @@ namespace Ds3FbxSharp
                 
             }
 
-            FbxSkeleton skeletonRoot = FbxSkeleton.Create(Scene, "ActualRoot");
+            //FbxSkeleton skeletonRoot = FbxSkeleton.Create(Scene, "ActualRoot");
 
-            FbxNode skeletonRootNode = skeletonRoot.CreateNode();
+            //FbxNode skeletonRootNode = skeletonRoot.CreateNode();
 
             foreach (var root in boneDatas.Where(bone => bone.parent == null))
             {
-                skeletonRootNode.AddChild(root.exportData.FbxNode);
+                Scene.GetRootNode().AddChild(root.exportData.FbxNode);
             }
 
-            return new DsSkeleton(skeletonRootNode, boneDatas);
+            return new DsSkeleton(null, boneDatas);
         }
 
         public FbxScene Scene { get; }
