@@ -25,9 +25,6 @@ namespace Ds3FbxSharp
             return new FbxVector2(vector.X, vector.Y);
         }
 
-
-
-
         public static Vector3 QuaternionToEuler(this Quaternion q)
         {
             Vector3 angles = new Vector3();
@@ -161,7 +158,7 @@ namespace Ds3FbxSharp
 
                 // this fixes vertex positions since otherwise the model is turned inside out
                 // and it appears like it holds weapons in the left hand
-                //position.Z = -position.Z;
+                position.Z = -position.Z;
 
                 normal.GetDirectArray().Add(vertex.Normal.ToFbxVector4());
 

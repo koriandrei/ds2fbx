@@ -39,9 +39,33 @@ namespace Ds3FbxSharp
             }
         }
 
-        static IEnumerable<T> GetHkxObjects<T>(IEnumerable<HKX> hkxs) where T: HKX.HKXObject
+        static (T1, T2, T3) GetHkxObjectsFromHkx<T1, T2, T3>(HKX hkx) where T1 : HKX.HKXObject where T2 : HKX.HKXObject
+        {
+            return (hkx.DataSection.Objects.OfType<T1>().SingleOrDefault(), hkx.DataSection.Objects.OfType<T2>().SingleOrDefault(), hkx.DataSection.Objects.OfType<T3>().SingleOrDefault());
+        }
+
+        static (T1, T2) GetHkxObjectsFromHkx<T1, T2>(HKX hkx) where T1 : HKX.HKXObject where T2 : HKX.HKXObject
+        {
+            var objects = GetHkxObjectsFromHkx<T1, T2, T2>(hkx);
+            return (objects.Item1, objects.Item2);
+        }
+
+        static T1 GetHkxObjectsFromHkx<T1>(HKX hkx) where T1 : HKX.HKXObject
+        {
+            var objects = GetHkxObjectsFromHkx<T1, T1, T1>(hkx);
+            return objects.Item1;
+        }
+
+        static IEnumerable<T> GetHkxObjects<T>(IEnumerable<HKX> hkxs) where T : HKX.HKXObject
         {
             return hkxs.SelectMany(hkx => hkx.DataSection.Objects).Where(hkxObject => hkxObject is T).Select(hkxObject => (T)hkxObject);
+        }
+
+        static IEnumerable<(T1, T2, T3)> GetHkxObjects<T1, T2, T3>(IEnumerable<HKX> hkxs) where T1 : HKX.HKXObject where T2 : HKX.HKXObject
+where T3 : HKX.HKXObject
+
+        {
+            return hkxs.Select(GetHkxObjectsFromHkx<T1, T2, T3>).Where(tuple => tuple.Item1 != null && tuple.Item2 != null && tuple.Item3 != null);
         }
 
         static void Main(string[] args)
@@ -67,15 +91,17 @@ namespace Ds3FbxSharp
             var fileLookup = System.IO.Directory.GetFiles(@"G:\SteamLibrary\steamapps\common\DARK SOULS III\Game\chr\", string.Format(System.Globalization.CultureInfo.InvariantCulture, "*{0}*bnd.dcx", charToLookFor))
                 .Concat(System.IO.Directory.GetFiles(@"G:\SteamLibrary\steamapps\common\DARK SOULS III\Game\parts\", "bd_m_*bnd.dcx"))
                 .Select(path => new BND4Reader(path))
-                .SelectMany(bndReader => bndReader.Files.Where(file=>{
+                .SelectMany(bndReader => bndReader.Files.Where(file =>
+                {
                     if (file.Name.EndsWith("hkx"))
                     {
-                        bool isAnimHkx = file.Name.Substring(file.Name.LastIndexOf("\\") + 1).StartsWith("a20");
+                        bool isAnimHkx = file.Name.Substring(file.Name.LastIndexOf("\\") + 1).StartsWith("a10");
 
                         return isAnimHkx;
                     }
                     return true;
                 }).Select(file => bndReader.ReadFile(file)))
+                //.ToList()
                 //.GroupBy(fileContents=>GetModelDataType(fileContents))
                 //.ToDictionary()
                 .ToLookup(GetModelDataType)
@@ -84,7 +110,9 @@ namespace Ds3FbxSharp
                 //.First()
                 ;
 
-            FLVER2 flver = fileLookup[ModelDataType.Flver].Select(FLVER2.Read).Where(flver=>flver.Meshes.Count > 0).ElementAt(1);
+            Console.WriteLine("Loaded files");
+
+            FLVER2 flver = fileLookup[ModelDataType.Flver].Select(FLVER2.Read).Where(flver => flver.Meshes.Count > 0).ElementAt(7);
             var hkxs = fileLookup[ModelDataType.Hkx].Select(HKX.Read);
             var skeletons = GetHkxObjects<HKX.HKASkeleton>(hkxs);
 
@@ -114,9 +142,13 @@ namespace Ds3FbxSharp
                 }
             }
 
+            Console.WriteLine("Exported meshes");
+
             List<DsBone> bones = SkeletonFixup.FixupDsBones(flver, hkaSkeleton).ToList();
 
-            DsSkeleton skeleton = new SkeletonExporter(scene, flver, bones).ParseSkeleton();
+            DsSkeleton skeleton = new SkeletonExporter(scene, flver, hkaSkeleton, bones).ParseSkeleton();
+
+            Console.WriteLine("Exported skeleton");
 
             if (meshes != null)
             {
@@ -126,6 +158,8 @@ namespace Ds3FbxSharp
                     meshData.FbxData.AddDeformer(generatedSkin);
                 };
             }
+
+            Console.WriteLine("Exported skin");
 
             {
                 FbxPose pose = FbxPose.Create(scene, "Pose");
@@ -141,25 +175,25 @@ namespace Ds3FbxSharp
                 scene.AddPose(pose);
             }
 
-            Func<HKX.HKASplineCompressedAnimation, int, bool> b = ((animation, animIndex) =>
+            Console.WriteLine("Exporting animations...");
+
+            Func<HKX.HKASplineCompressedAnimation, HKX.HKADefaultAnimatedReferenceFrame, int, bool> b = ((animation, refFrame, animIndex) =>
             {
                 DSAnimStudio.NewHavokAnimation_SplineCompressedData anim = new DSAnimStudio.NewHavokAnimation_SplineCompressedData(animation, hkaSkeleton, binding);
 
-                var animExporter = new AnimationExporter(scene, new AnimationExportData() { dsAnimation = anim, hkaAnimationBinding = binding, skeleton = skeleton, name = animIndex.ToString() });
+                var animExporter = new AnimationExporter(scene, new AnimationExportData() { dsAnimation = anim, animRefFrame = refFrame, hkaAnimationBinding = binding, skeleton = skeleton, name = animIndex.ToString() });
 
                 var dummy = animExporter.Fbx;
 
                 return dummy == null;
-
             });
 
-            var animations11 = GetHkxObjects<HKX.HKASplineCompressedAnimation>(hkxs).Take(5).ToList();
+            const int animsToTake = 5;
 
-            int maxAnimCount = 100;
-
-            for (int i = 0; i< animations11.Count && i < maxAnimCount; ++i)
+            int index = 0;
+            foreach (var animData in GetHkxObjects<HKX.HKASplineCompressedAnimation, HKX.HKASplineCompressedAnimation, HKX.HKADefaultAnimatedReferenceFrame>(hkxs).ToList().Take(animsToTake))
             {
-                b(animations11[i], i);
+                b(animData.Item1, animData.Item3, index++);
             }
 
             PrintFbxNode(sceneRoot);

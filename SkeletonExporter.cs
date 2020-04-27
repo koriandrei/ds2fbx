@@ -72,14 +72,17 @@ namespace Ds3FbxSharp
     {
         private List<DsBone> bones;
 
-        public SkeletonExporter(FbxScene scene, FLVER2 flver, List<DsBone> bones)
+        private readonly HKX.HKASkeleton hkaSkeleton;
+
+        public SkeletonExporter(FbxScene scene, FLVER2 flver, HKX.HKASkeleton hKASkeleton, List<DsBone> bones)
         {
             Scene = scene;
             this.Flver = flver;
             this.bones = bones;
+            this.hkaSkeleton = hKASkeleton;
         }
 
-        private static Matrix4x4 CalculateGlobalTransform(FLVER.Bone bone, FLVER2 flver)
+        private static Matrix4x4 CalculateGlobalTransformFlver(FLVER.Bone bone, FLVER2 flver)
         {
             Matrix4x4 localTransform = bone.ComputeLocalTransform();
 
@@ -91,11 +94,56 @@ namespace Ds3FbxSharp
 
             if (bone.ParentIndex >= 0)
             {
-                localTransform *= CalculateGlobalTransform(flver.Bones[bone.ParentIndex], flver);
+                localTransform *= CalculateGlobalTransformFlver(flver.Bones[bone.ParentIndex], flver);
             }
 
             return localTransform;
         }
+
+        private static Matrix4x4 CalculateGlobalTransformHka(int hkxBoneIndex, HKX.HKASkeleton skeleton)
+        {
+            var hkxTransform = skeleton.Transforms.GetArrayData().Elements[hkxBoneIndex];
+
+            Matrix4x4 transformMatrix =
+                Matrix4x4.CreateScale(hkxTransform.Scale.Vector.X, hkxTransform.Scale.Vector.Y, hkxTransform.Scale.Vector.Z)
+                * Matrix4x4.CreateFromQuaternion(new Quaternion(hkxTransform.Rotation.Vector.X, hkxTransform.Rotation.Vector.Y, hkxTransform.Rotation.Vector.Z, hkxTransform.Rotation.Vector.W))
+                * Matrix4x4.CreateTranslation(hkxTransform.Position.Vector.X, hkxTransform.Position.Vector.Y, hkxTransform.Position.Vector.Z);
+
+            short parentIndex = skeleton.ParentIndices[hkxBoneIndex].data;
+
+            if (parentIndex >= 0)
+            {
+                transformMatrix *= CalculateGlobalTransformHka(parentIndex, skeleton);
+            }
+            else
+            {
+                //transformMatrix *= Matrix4x4.CreateRotationX((float)(-Math.PI / 2)) * Matrix4x4.CreateRotationZ((float)(Math.PI / 2));
+            }
+
+            return transformMatrix;
+        }
+
+        private static Matrix4x4 CalculateGlobalTransform(DsBoneData boneData, FLVER2 flver, HKX.HKASkeleton hkaSkeleton)
+        {
+            if (boneData.exportData.SoulsData.HkxBoneIndex >= 0)
+            {
+                System.Diagnostics.Debug.Assert(hkaSkeleton != null);
+
+                System.Console.WriteLine("Using HKA transform");
+
+                return CalculateGlobalTransformHka(boneData.exportData.SoulsData.HkxBoneIndex, hkaSkeleton);
+            }
+
+            if (flver != null)
+            {
+                System.Console.WriteLine("Using FLVER transform");
+
+                return CalculateGlobalTransformFlver(boneData.flverBone, flver);
+            }
+
+            throw new System.ArgumentException("Can't calculate transform " + nameof(boneData));
+        }
+
 
         public DsSkeleton ParseSkeleton()
         {
@@ -125,19 +173,67 @@ namespace Ds3FbxSharp
                 boneData.SetParent(parentBoneData);
             }
 
+            Func<DsBoneData, Matrix4x4> calculateTransform = (boneData) =>
+            {
+                Matrix4x4 rawGlobalTransform = CalculateGlobalTransform(boneData, Flver, hkaSkeleton);
+
+                var preFixupMatrix = Matrix4x4.CreateScale(new Vector3(1, 1, 1)); // * Matrix4x4.CreateRotationX((float)(-Math.PI)) * Matrix4x4.CreateRotationY((float)(-Math.PI / 2)) * Matrix4x4.CreateRotationZ((float)(Math.PI / 2));
+
+                var postFixupMatrix = Matrix4x4.CreateScale(new Vector3(1, 1, 1));// * Matrix4x4.CreateRotationX((float)(-Math.PI / 2)) * Matrix4x4.CreateRotationZ((float)(Math.PI / 2));
+
+                if (boneData.parent == null)
+                {
+                    Matrix4x4 preFixupParent = Matrix4x4.Identity;
+                    Matrix4x4 postFixupParent = Matrix4x4.Identity * Matrix4x4.CreateRotationX((float)(-Math.PI / 2)) * Matrix4x4.CreateRotationZ((float)(Math.PI / 2)); ; //* Matrix4x4.CreateScale(1,1,-1);
+
+                    preFixupMatrix *= preFixupParent;
+                    postFixupMatrix *= postFixupParent;
+                }
+                else
+                {
+                    if (Matrix4x4.Decompose(rawGlobalTransform, out Vector3 scale, out Quaternion rotation, out Vector3 translation))
+                    {
+                        translation.Z = -translation.Z;
+
+                        rawGlobalTransform = Matrix4x4.CreateScale(scale) * Matrix4x4.CreateFromQuaternion(rotation) * Matrix4x4.CreateTranslation(translation);
+                    }
+                    else
+                    {
+                        throw new Exception();
+                    }
+                    //postFixupMatrix *= Matrix4x4.CreateScale(1, 1, -1);
+                }
+
+                return preFixupMatrix * rawGlobalTransform * postFixupMatrix;
+            };
+
+            //Func<DsBoneData, Matrix4x4> calculateParentTransform = (boneData) =>
+            //{
+            //    Matrix4x4 rawGlobalTransform = CalculateGlobalTransform(boneData, Flver, hkaSkeleton);
+
+            //    var preFixupMatrix = Matrix4x4.CreateScale(new Vector3(1, 1, 1)); // * Matrix4x4.CreateRotationX((float)(-Math.PI)) * Matrix4x4.CreateRotationY((float)(-Math.PI / 2)) * Matrix4x4.CreateRotationZ((float)(Math.PI / 2));
+
+            //    var postFixupMatrix = Matrix4x4.CreateScale(new Vector3(1, 1, 1)); // * Matrix4x4.CreateRotationX((float)(-Math.PI / 2)) * Matrix4x4.CreateRotationZ((float)(Math.PI / 2));
+
+            //    if (boneData.parent == null)
+            //    {
+            //        postFixupMatrix *= Matrix4x4.CreateRotationX((float)(-Math.PI / 2)) * Matrix4x4.CreateRotationZ((float)(Math.PI / 2));
+            //    }
+            //    else
+            //    {
+            //        //postFixupMatrix *= Matrix4x4.CreateScale(1, 1, -1);
+            //    }
+
+            //    return preFixupMatrix * rawGlobalTransform * postFixupMatrix;
+            //};
+
             foreach (var boneData in boneDatas)
             {
-                Matrix4x4 globalTransform = CalculateGlobalTransform(boneData.flverBone, Flver);
-
-                var hackFixupMatrix = Matrix4x4.CreateScale(new Vector3(1, 1, 1));
-
-                globalTransform *= hackFixupMatrix;
+                var globalTransform = calculateTransform(boneData);
 
                 if (boneData.parent != null)
                 {
-                    Matrix4x4 globalParentTransform = CalculateGlobalTransform(boneData.parent.flverBone, Flver);
-                    
-                    globalParentTransform *= hackFixupMatrix;
+                    var globalParentTransform = calculateTransform(boneData.parent);
 
                     Matrix4x4 invertedGlobalParentTransform;
                     if (Matrix4x4.Invert(globalParentTransform, out invertedGlobalParentTransform))
@@ -148,6 +244,9 @@ namespace Ds3FbxSharp
                     {
                         throw new Exception();
                     }
+                }
+                else
+                {
                 }
 
                 Vector3 scale;

@@ -14,6 +14,8 @@ namespace Ds3FbxSharp
     {
         public DSAnimStudio.NewHavokAnimation_SplineCompressedData dsAnimation;
 
+        public HKX.HKADefaultAnimatedReferenceFrame animRefFrame;
+
         //public HKX.HKASplineCompressedAnimation hkaAnimation;
 
         public HKX.HKAAnimationBinding hkaAnimationBinding;
@@ -25,8 +27,11 @@ namespace Ds3FbxSharp
 
     class AnimationExporter : Exporter<AnimationExportData, FbxAnimStack>
     {
+        private readonly RootMotionCache rootMotionCache;
+
         public AnimationExporter(FbxScene scene, AnimationExportData soulsType) : base(scene, soulsType)
         {
+            rootMotionCache = new RootMotionCache(soulsType);
         }
 
         class AnimExportHelper
@@ -103,6 +108,13 @@ namespace Ds3FbxSharp
             {
                 currentTransformMatrix *= GetMatrix(parentIndex, blockIndex, frameIndex);
             }
+            else
+            {
+                var rootMotion = rootMotionCache.GetRootMotionOnFrame((int)frameIndex);
+
+                currentTransformMatrix *= Microsoft.Xna.Framework.Matrix.CreateRotationY(rootMotion.W);
+                currentTransformMatrix *= Microsoft.Xna.Framework.Matrix.CreateTranslation(rootMotion.X, rootMotion.Y, rootMotion.Z);
+            }
 
             return currentTransformMatrix;
         }
@@ -145,6 +157,45 @@ namespace Ds3FbxSharp
 
             //transform *= hackFixupTransform;
             //transform.Translation.Z = -transform.Translation.Z;
+        }
+
+        struct RootMotionCache
+        {
+            public RootMotionCache(AnimationExportData souls)
+            {
+                Souls = souls;
+
+                var rootMotionFrames = Souls.animRefFrame.ReferenceFrameSamples.GetArrayData().Elements;
+
+                System.Diagnostics.Debug.Assert(rootMotionFrames.Count == souls.dsAnimation.FrameCount);
+            }
+
+            public Vector4 GetRootMotion(float frame)
+            {
+                var rootMotionFrames = Souls.animRefFrame.ReferenceFrameSamples.GetArrayData().Elements;
+
+                var previousFrame = GetRootMotionOnFrame((int)Math.Floor(frame));
+
+                var nextFrame = GetRootMotionOnFrame((int)Math.Ceiling(frame));
+
+                float alpha = (float)(frame - Math.Floor(frame));
+
+                return Vector4.Lerp(previousFrame, nextFrame, alpha);
+            }
+
+            public Vector4 GetRootMotionOnFrame(int frame)
+            {
+                if (Souls.animRefFrame == null)
+                {
+                    return Vector4.Zero;
+                }
+
+                var rootMotionFrames = Souls.animRefFrame.ReferenceFrameSamples.GetArrayData().Elements;
+
+                return rootMotionFrames[frame].Vector;
+            }
+
+            public AnimationExportData Souls { get; }
         }
 
         protected override FbxAnimStack GenerateFbx()
@@ -194,30 +245,22 @@ namespace Ds3FbxSharp
 
                 foreach (var bone in Souls.skeleton.boneDatas)
                 {
-                    //DSAnimStudio.NewBlendableTransform newBlendableTransform = Get(bone, blockIndex, frameIndex);
+                    var hackPreMatrix = Microsoft.Xna.Framework.Matrix.CreateScale(-1, 1, 1);
+                    var hackPostMatrix = Microsoft.Xna.Framework.Matrix.CreateScale(1, 1, -1) ;
 
-                    var hackNewBlendableMatrix = GetMatrix(bone.exportData.SoulsData.HkxBoneIndex, blockIndex, frameIndex); // newBlendableTransform.GetMatrixScale() * newBlendableTransform.GetMatrix();
+                    var calculatedMatrix = GetMatrix(bone.exportData.SoulsData.HkxBoneIndex, blockIndex, frameIndex);
 
-                    //HackFixupTransform(ref newBlendableTransform);
-                    //Microsoft.Xna.Framework.Matrix hackFixupMatrix = Microsoft.Xna.Framework.Matrix.CreateScale(new Microsoft.Xna.Framework.Vector3(1, 1, -1));
-
-                    //newBlendableTransform *= new DSAnimStudio.NewBlendableTransform(hackFixupMatrix);
+                    var hackNewBlendableMatrix = hackPreMatrix * calculatedMatrix * hackPostMatrix;
 
 
 
                     if (bone.parent != null)
                     {
-                        //DSAnimStudio.NewBlendableTransform parentTransform = GetTransform(bone.parent, blockIndex, frameIndex);
-                        //var hackParentBlendableMatrix = parentTransform.GetMatrixScale() * parentTransform.GetMatrix();
-                        var hackParentBlendableMatrix = GetMatrix(bone.parent.exportData.SoulsData.HkxBoneIndex, blockIndex, frameIndex);
+                        var calculatedParentMatrix = GetMatrix(bone.parent.exportData.SoulsData.HkxBoneIndex, blockIndex, frameIndex);
 
-                        //HackFixupMatrix(ref hackParentBlendableMatrix);
-
-                        //parentTransform *= new DSAnimStudio.NewBlendableTransform( hackFixupMatrix);
+                        var hackParentBlendableMatrix = hackPreMatrix * calculatedParentMatrix * hackPostMatrix;
 
                         hackNewBlendableMatrix *= Microsoft.Xna.Framework.Matrix.Invert(hackParentBlendableMatrix);
-
-                        //newBlendableTransform *= parentTransform.Invert();
                     }
                     else
                     {
