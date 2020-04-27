@@ -51,7 +51,7 @@ namespace Ds3FbxSharp
 
         public string Name { get; }
 
-        public string ParentName { get; }
+        public string ParentName { get; set; }
 
         public int HkxBoneIndex { get; }
     }
@@ -64,8 +64,28 @@ namespace Ds3FbxSharp
         {
             return flver.Bones.Select(flverBone => new DsBone(flverBone, flver));
         }
-
         public static IEnumerable<DsBone> FixupDsBones(FLVER2 flver, HKX.HKASkeleton hkx)
+        {
+            var skel = FixupDsBonesInternal(flver, hkx);
+
+            Func<DsBone, DsBone> boneConversion = bone => { 
+                //if (bone.Name == "Pelvis")
+                //{
+                //    bone.ParentName = "RootRotXZ";
+                //}
+
+                //if (bone.Name == "Spine")
+                //{
+                //    bone.ParentName = "Pelvis";
+                //}
+
+                return bone;
+            };
+
+            return skel.Select(boneConversion);
+        }
+
+        private static IEnumerable<DsBone> FixupDsBonesInternal(FLVER2 flver, HKX.HKASkeleton hkx)
         {
             if (hkx == null)
             {

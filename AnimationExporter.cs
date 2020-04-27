@@ -261,6 +261,25 @@ namespace Ds3FbxSharp
                     var hackPreMatrix = Microsoft.Xna.Framework.Matrix.Identity; // * Microsoft.Xna.Framework.Matrix.CreateRotationY((float)(Math.PI / 2)); ; // Microsoft.Xna.Framework.Matrix.CreateScale(-1, 1, 1);
                     var hackPostMatrix = Microsoft.Xna.Framework.Matrix.Identity; // Microsoft.Xna.Framework.Matrix.CreateScale(1, 1, -1);
 
+                    bool hackShouldZeroYRotation = false; // bone.exportData.SoulsData.Name == "RootPos";
+
+                    if (hackShouldZeroYRotation)
+                    {
+                        if (calculatedMatrix.Decompose(out var scale, out var rotation, out var translation))
+                        {
+                            var rot1 = new Quaternion(rotation.X, rotation.Y, rotation.Z, rotation.W);
+                            var euler = rot1.QuaternionToEuler();
+
+                            euler.Y = 0;
+
+                            calculatedMatrix *= Microsoft.Xna.Framework.Matrix.Invert(Microsoft.Xna.Framework.Matrix.CreateFromQuaternion(rotation)) * Microsoft.Xna.Framework.Matrix.CreateFromQuaternion(Microsoft.Xna.Framework.Quaternion.CreateFromYawPitchRoll(euler.X, euler.Y, euler.Z));
+                        }
+                        else
+                        {
+                            throw new Exception();
+                        }
+                    }
+
                     if (bone.parent == null)
                     {
                         //var unrotateRoot = Microsoft.Xna.Framework.Matrix.CreateRotationZ((float)(Math.PI / 2)) * Microsoft.Xna.Framework.Matrix.CreateRotationY(-(float)(Math.PI / 2));
@@ -313,8 +332,10 @@ namespace Ds3FbxSharp
 
                     AnimExportHelper animExportHelper = boneHelpers[hkxBoneIndex];
 
+                    var euler = new Quaternion(newBlendableTransform.Rotation.X, newBlendableTransform.Rotation.Y, newBlendableTransform.Rotation.Z, newBlendableTransform.Rotation.W).QuaternionToEuler();
+
                     animExportHelper.translation.AddPoint(time, new Vector3(newBlendableTransform.Translation.X, newBlendableTransform.Translation.Y, newBlendableTransform.Translation.Z));
-                    animExportHelper.rotation.AddPoint(time, new Quaternion(newBlendableTransform.Rotation.X, newBlendableTransform.Rotation.Y, newBlendableTransform.Rotation.Z, newBlendableTransform.Rotation.W).QuaternionToEuler());
+                    animExportHelper.rotation.AddPoint(time, euler);
                     animExportHelper.scale.AddPoint(time, new Vector3(newBlendableTransform.Scale.X, newBlendableTransform.Scale.Y, newBlendableTransform.Scale.Z));
                 }
             }
