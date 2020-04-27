@@ -24,6 +24,12 @@ namespace Ds3FbxSharp
         {
             return new FbxVector2(vector.X, vector.Y);
         }
+        
+        public static Vector3 ToVector3(this Vector4 vector)
+        {
+            return new Vector3(vector.X, vector.Y, vector.Z);
+        }
+
 
         public static Vector3 QuaternionToEuler(this Quaternion q)
         {

@@ -110,10 +110,10 @@ namespace Ds3FbxSharp
             }
             else
             {
-                var rootMotion = rootMotionCache.GetRootMotionOnFrame((int)frameIndex);
+                //var rootMotion = rootMotionCache.GetRootMotionOnFrame((int)frameIndex);
 
-                currentTransformMatrix *= Microsoft.Xna.Framework.Matrix.CreateRotationY(rootMotion.W);
-                currentTransformMatrix *= Microsoft.Xna.Framework.Matrix.CreateTranslation(rootMotion.X, rootMotion.Y, rootMotion.Z);
+                //currentTransformMatrix *= Microsoft.Xna.Framework.Matrix.CreateRotationY(rootMotion.W);
+                //currentTransformMatrix *= Microsoft.Xna.Framework.Matrix.CreateTranslation(rootMotion.X, rootMotion.Y, rootMotion.Z);
             }
 
             return currentTransformMatrix;
@@ -190,9 +190,21 @@ namespace Ds3FbxSharp
                     return Vector4.Zero;
                 }
 
+
                 var rootMotionFrames = Souls.animRefFrame.ReferenceFrameSamples.GetArrayData().Elements;
 
-                return rootMotionFrames[frame].Vector;
+                var rawRootMotionData = rootMotionFrames[frame].Vector;
+
+
+                var rootMotionMatrix = Matrix4x4.CreateWorld(Vector3.Zero, Souls.animRefFrame.Forward.ToVector3(), Souls.animRefFrame.Up.ToVector3());
+
+                var transformedRootMotion = Vector3.Transform(rawRootMotionData.ToVector3(), rootMotionMatrix);
+
+                var fixedUpRootMotion = new Vector4(transformedRootMotion.X, transformedRootMotion.Y, transformedRootMotion.Z, rawRootMotionData.W);
+
+
+                return fixedUpRootMotion;
+                //return rawRootMotionData; 
             }
 
             public AnimationExportData Souls { get; }
@@ -200,7 +212,6 @@ namespace Ds3FbxSharp
 
         protected override FbxAnimStack GenerateFbx()
         {
-
             DSAnimStudio.NewHavokAnimation_SplineCompressedData anim = Souls.dsAnimation;
             var animStack = FbxAnimStack.Create(Scene, Souls.name + "_AnimStack");
 
@@ -243,33 +254,60 @@ namespace Ds3FbxSharp
 
                 int blockIndex = (int)(Math.Floor(((double)frameInBlockIndex) / anim.NumFramesPerBlock));
 
-                foreach (var bone in Souls.skeleton.boneDatas)
+                Func<DsBoneData, Microsoft.Xna.Framework.Matrix> calculateTransform = bone =>
                 {
-                    var hackPreMatrix = Microsoft.Xna.Framework.Matrix.CreateScale(-1, 1, 1);
-                    var hackPostMatrix = Microsoft.Xna.Framework.Matrix.CreateScale(1, 1, -1) ;
-
                     var calculatedMatrix = GetMatrix(bone.exportData.SoulsData.HkxBoneIndex, blockIndex, frameIndex);
 
-                    var hackNewBlendableMatrix = hackPreMatrix * calculatedMatrix * hackPostMatrix;
+                    var hackPreMatrix = Microsoft.Xna.Framework.Matrix.Identity; // * Microsoft.Xna.Framework.Matrix.CreateRotationY((float)(Math.PI / 2)); ; // Microsoft.Xna.Framework.Matrix.CreateScale(-1, 1, 1);
+                    var hackPostMatrix = Microsoft.Xna.Framework.Matrix.Identity; // Microsoft.Xna.Framework.Matrix.CreateScale(1, 1, -1);
+
+                    if (bone.parent == null)
+                    {
+                        //var unrotateRoot = Microsoft.Xna.Framework.Matrix.CreateRotationZ((float)(Math.PI / 2)) * Microsoft.Xna.Framework.Matrix.CreateRotationY(-(float)(Math.PI / 2));
+
+                        hackPostMatrix = Microsoft.Xna.Framework.Matrix.Invert(calculatedMatrix) * Microsoft.Xna.Framework.Matrix.CreateRotationX((float)(-Math.PI / 2)) * hackPostMatrix;
+                    }
+                    else
+                    {
+                        var translation = calculatedMatrix.Translation;
+
+                        translation.Z = -translation.Z;
+
+                        calculatedMatrix.Translation = translation;
+                    }
+
+                    return hackPreMatrix * calculatedMatrix * hackPostMatrix;
+                };
+
+                foreach (var bone in Souls.skeleton.boneDatas)
+                {
+                    var calculatedMatrix = calculateTransform(bone);
+
+                    var hackNewBlendableMatrix = calculatedMatrix;
 
 
 
                     if (bone.parent != null)
                     {
-                        var calculatedParentMatrix = GetMatrix(bone.parent.exportData.SoulsData.HkxBoneIndex, blockIndex, frameIndex);
+                        var calculatedParentMatrix = calculateTransform(bone.parent);
 
-                        var hackParentBlendableMatrix = hackPreMatrix * calculatedParentMatrix * hackPostMatrix;
+                        var hackParentBlendableMatrix = calculatedParentMatrix;
 
                         hackNewBlendableMatrix *= Microsoft.Xna.Framework.Matrix.Invert(hackParentBlendableMatrix);
                     }
                     else
                     {
                         HackFixupMatrix(ref hackNewBlendableMatrix);
+
+                        var rootMotion = rootMotionCache.GetRootMotionOnFrame((int)frameIndex);
+
+                        var rootMotionMatrix = Microsoft.Xna.Framework.Matrix.CreateRotationY(rootMotion.W);
+                        rootMotionMatrix *= Microsoft.Xna.Framework.Matrix.CreateTranslation(rootMotion.X, rootMotion.Y, rootMotion.Z);
+
+                        hackNewBlendableMatrix *= rootMotionMatrix;
                     }
 
                     var newBlendableTransform = new DSAnimStudio.NewBlendableTransform(hackNewBlendableMatrix);
-
-
 
                     int hkxBoneIndex = bone.exportData.SoulsData.HkxBoneIndex;
 
