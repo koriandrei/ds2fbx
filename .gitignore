@@ -1,0 +1,5 @@
+Packages/
+!Packages/com.autodesk.fbx/
+bin/
+obj/
+.vs/
