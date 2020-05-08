@@ -10,22 +10,14 @@ namespace Ds3FbxSharp
 {
     class SkinExportData
     {
-        public SkinExportData(int activeMeshIndex, DsSkeleton skeleton, FLVER2 flver)
-        {
-            FLVER2.Mesh mesh = flver.Meshes[activeMeshIndex]; 
-            meshData = new MeshExportData { mesh = mesh, meshRoot = flver.Bones[mesh.DefaultBoneIndex] };
-            this.flver = flver;
-            this.skeleton = skeleton;
-        }
-
-        public SkinExportData(MeshExportData meshData, DsSkeleton skeleton, FLVER2 flver)
+        public SkinExportData(FbxExportData<MeshExportData, FbxMesh> meshData, DsSkeleton skeleton, FLVER2 flver)
         {
             this.meshData = meshData;
             this.skeleton = skeleton;
             this.flver = flver;
         }
 
-        public MeshExportData meshData { get; }
+        public FbxExportData<MeshExportData, FbxMesh> meshData { get; }
 
         public readonly FLVER2 flver;
 
@@ -47,7 +39,7 @@ namespace Ds3FbxSharp
 
         protected override FbxSkin GenerateFbx()
         {
-            MeshExportData meshData = Souls.meshData;
+            MeshExportData meshData = Souls.meshData.SoulsData;
 
             ICollection<BoneIndexToWeightPair> rawBoneDeformerData = new List<BoneIndexToWeightPair>();
 
@@ -73,6 +65,8 @@ namespace Ds3FbxSharp
             
             FbxSkin skin = FbxSkin.Create(Owner, meshData.meshRoot.Name + "_Skin");
 
+            System.Console.WriteLine($"Generating {meshData.meshRoot.Name}");
+
             foreach (var deformerData in rawBoneDeformerData.ToLookup(boneDeformerData => boneDeformerData.flverBoneIndex))
             {
                 FLVER2 flver = Souls.flver;
@@ -81,10 +75,15 @@ namespace Ds3FbxSharp
 
                 DsBoneData boneData = Souls.skeleton.boneDatas.Single(boneData => boneData.flverBone == flverBone);
 
+                //System.Console.WriteLine($"Exporting {deformerData.Key} : {flverBone.Name} with {deformerData.Count(weight=>weight.boneWeight > 0)} vertices");
+
                 FbxCluster boneCluster = FbxCluster.Create(skin, meshData.meshRoot.Name + "_" + boneData.exportData.SoulsData.Name + "_Cluster");
 
                 boneCluster.SetLink(boneData.exportData.FbxNode);
-
+                boneCluster.SetLinkMode(FbxCluster.ELinkMode.eTotalOne);
+                boneCluster.SetControlPointIWCount(deformerData.Count());
+                boneCluster.SetTransformMatrix(Souls.meshData.FbxNode.EvaluateGlobalTransform());
+                boneCluster.SetTransformLinkMatrix(boneData.exportData.FbxNode.EvaluateGlobalTransform());
                 foreach (BoneIndexToWeightPair boneWeightPair in deformerData)
                 {
                     boneCluster.AddControlPointIndex(boneWeightPair.vertexIndex, boneWeightPair.boneWeight);
@@ -94,6 +93,22 @@ namespace Ds3FbxSharp
 
                 skin.AddCluster(boneCluster);
             }
+
+            //foreach (var dd in rawBoneDeformerData.GroupBy(biwp => biwp.vertexIndex).Where(group => group.Count() > 2))
+            //{
+                //System.Console.WriteLine($"Vertex {dd.Key} : {dd.Count()}");
+            //}
+
+            //var set = new HashSet<int>();
+            //for (int vertexIndex = 0; vertexIndex < meshData.mesh.Vertices.Count; ++vertexIndex)
+            //{
+            //    if (!rawBoneDeformerData.Any(x=>x.vertexIndex == vertexIndex))
+            //    {
+            //        set.Add(vertexIndex);
+            //    }
+            //}
+
+            //System.Console.WriteLine($"Total {set.Count} unweighted nodes");
 
             return skin;
         }

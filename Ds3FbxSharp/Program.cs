@@ -210,7 +210,7 @@ where T3 : HKX.HKXObject
             {
                 foreach (var meshData in meshes)
                 {
-                    FbxSkin generatedSkin = new SkinExporter(meshData.FbxData, new SkinExportData(meshData.SoulsData, skeleton, meshFlver)).Fbx;
+                    FbxSkin generatedSkin = new SkinExporter(meshData.FbxData, new SkinExportData(meshData, skeleton, meshFlver)).Fbx;
                     meshData.FbxData.AddDeformer(generatedSkin);
                 };
 

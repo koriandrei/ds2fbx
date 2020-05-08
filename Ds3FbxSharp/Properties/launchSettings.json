@@ -2,7 +2,7 @@
   "profiles": {
     "Ds3FbxSharp": {
       "commandName": "Project",
-      "commandLineArgs": "--basepath=\"G:\\SteamLibrary\\steamapps\\common\\DARK SOULS III\\Game\" --paths=chr/c1100.anibnd.dcx,chr/c1100.chrbnd.dcx --exports=Mesh,Skeleton,Skin"
+      "commandLineArgs": "--basepath=\"G:\\SteamLibrary\\steamapps\\common\\DARK SOULS III\\Game\" --paths=chr/c1100.anibnd.dcx,chr/c1100.chrbnd.dcx --exports=Mesh,Skeleton,Skin,Animation"
     }
   }
 }

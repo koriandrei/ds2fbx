@@ -185,24 +185,16 @@ namespace Ds3FbxSharp
                 if (boneData.parent == null)
                 {
                     Matrix4x4 preFixupParent = Matrix4x4.Identity;
-                    Matrix4x4 postFixupParent = Matrix4x4.Identity * Matrix4x4.CreateRotationX((float)(-Math.PI / 2)) * Matrix4x4.CreateRotationZ((float)(Math.PI / 2)); ; //* Matrix4x4.CreateScale(1,1,-1);
+                    Matrix4x4 postFixupParent = Matrix4x4.Identity; // * Matrix4x4.CreateRotationX((float)(-Math.PI / 2)) * Matrix4x4.CreateRotationZ((float)(Math.PI / 2)); ; //* Matrix4x4.CreateScale(1,1,-1);
 
                     preFixupMatrix *= preFixupParent;
                     postFixupMatrix *= postFixupParent;
                 }
                 else
                 {
-                    if (Matrix4x4.Decompose(rawGlobalTransform, out Vector3 scale, out Quaternion rotation, out Vector3 translation))
-                    {
-                        translation.Z = -translation.Z;
-
-                        rawGlobalTransform = Matrix4x4.CreateScale(scale) * Matrix4x4.CreateFromQuaternion(rotation) * Matrix4x4.CreateTranslation(translation);
-                    }
-                    else
-                    {
-                        throw new Exception();
-                    }
-                    //postFixupMatrix *= Matrix4x4.CreateScale(1, 1, -1);
+                    var t = rawGlobalTransform.Translation;
+                    t.Z = -t.Z;
+                    rawGlobalTransform.Translation = t;
                 }
 
                 return preFixupMatrix * rawGlobalTransform * postFixupMatrix;

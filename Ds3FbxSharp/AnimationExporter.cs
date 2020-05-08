@@ -138,7 +138,7 @@ namespace Ds3FbxSharp
                 );
             }
 
-                for (int frameIndex = 0; frameIndex < Souls.dsAnimation.FrameCount; ++frameIndex)
+            for (int frameIndex = 0; frameIndex < Souls.dsAnimation.FrameCount; ++frameIndex)
             {
                 FbxTime time = FbxTime.FromFrame(frameIndex);
 
@@ -146,16 +146,17 @@ namespace Ds3FbxSharp
                 {
                     var calculatedMatrix = GetMatrix(bone.exportData.SoulsData.HkxBoneIndex, frameIndex);
 
-                    var hackPreMatrix = Matrix4x4.Identity; // * Microsoft.Xna.Framework.Matrix.CreateRotationY((float)(Math.PI / 2)); ; // Microsoft.Xna.Framework.Matrix.CreateScale(-1, 1, 1);
-                    var hackPostMatrix = Matrix4x4.Identity; // Microsoft.Xna.Framework.Matrix.CreateScale(1, 1, -1);
+                    var hackPreMatrix = Matrix4x4.Identity; // * Matrix4x4.CreateRotationY((float)(-Math.PI / 2)); ; // Microsoft.Xna.Framework.Matrix.CreateScale(-1, 1, 1);
+                    var hackPostMatrix = Matrix4x4.Identity; // * Matrix4x4.CreateRotationY((float)(Math.PI)); // Matrix4x4.CreateScale(1, 1, -1);
 
                     if (bone.parent == null)
                     {
                         //var unrotateRoot = Microsoft.Xna.Framework.Matrix.CreateRotationZ((float)(Math.PI / 2)) * Microsoft.Xna.Framework.Matrix.CreateRotationY(-(float)(Math.PI / 2));
                         if (Matrix4x4.Invert(calculatedMatrix, out var inverted))
                         {
-                            hackPostMatrix =inverted *Matrix4x4.CreateRotationX((float)(-Math.PI / 2)) * hackPostMatrix;
-                        }else
+                            //hackPostMatrix =inverted *Matrix4x4.CreateRotationX((float)(-Math.PI / 2)) * hackPostMatrix;
+                        }
+                        else
                         {
                             throw new Exception();
                         }
@@ -195,18 +196,18 @@ namespace Ds3FbxSharp
                             throw new Exception();
                         }
                     }
-                    else
-                    {
-                        if (anim.RootMotion != null)
-                        {
-                            var rootMotion = anim.RootMotion.ExtractRootMotion(0, frameIndex / anim.Duration);
+                    //else
+                    //{
+                    //    if (anim.RootMotion != null)
+                    //    {
+                    //        var rootMotion = anim.RootMotion.ExtractRootMotion(0, frameIndex / anim.Duration);
 
-                            var rootMotionMatrix = Matrix4x4.CreateRotationY(rootMotion.directionChange);
-                            rootMotionMatrix *= Matrix4x4.CreateTranslation(rootMotion.positionChange);
+                    //        var rootMotionMatrix = Matrix4x4.CreateRotationY(rootMotion.directionChange);
+                    //        rootMotionMatrix *= Matrix4x4.CreateTranslation(rootMotion.positionChange);
 
-                            hackNewBlendableMatrix *= rootMotionMatrix;
-                        }
-                    }
+                    //        hackNewBlendableMatrix *= rootMotionMatrix;
+                    //    }
+                    //}
 
                     var newBlendableTransform = new NewBlendableTransform(hackNewBlendableMatrix);
 
