@@ -144,12 +144,19 @@ namespace Ds3FbxSharp
 
                 Func<DsBoneData, Matrix4x4> calculateTransform = bone =>
                 {
+                    if (bone.parent == null)
+                    {
+                        return Matrix4x4.Identity;
+                    }
+
                     var calculatedMatrix = GetMatrix(bone.exportData.SoulsData.HkxBoneIndex, frameIndex);
 
                     var hackPreMatrix = Matrix4x4.CreateRotationZ((float)(-Math.PI/2)); // * Matrix4x4.CreateRotationY((float)(-Math.PI / 2)); ; // Microsoft.Xna.Framework.Matrix.CreateScale(-1, 1, 1);
-                    var hackPostMatrix = Matrix4x4.CreateScale(-1,1,1); // * Matrix4x4.CreateRotationY((float)(Math.PI)); // Matrix4x4.CreateScale(1, 1, -1);
+                    var hackPostMatrix = Matrix4x4.CreateScale(-1, 1, 1); // Matrix4x4.CreateScale(-1,1,1); // * Matrix4x4.CreateRotationY((float)(Math.PI)); // Matrix4x4.CreateScale(1, 1, -1);
 
-                    return hackPreMatrix * calculatedMatrix * hackPostMatrix;
+                    var transformedMatrix = hackPreMatrix * calculatedMatrix * hackPostMatrix;
+                    
+                    return transformedMatrix;
                 };
 
                 foreach (var bone in Souls.skeleton.boneDatas)
@@ -158,15 +165,11 @@ namespace Ds3FbxSharp
 
                     var hackNewBlendableMatrix = calculatedMatrix;
 
-
-
                     if (bone.parent != null)
                     {
-                        var calculatedParentMatrix = calculateTransform(bone.parent);
+                        Matrix4x4 parentMatrix = calculateTransform(bone.parent);
 
-                        var hackParentBlendableMatrix = calculatedParentMatrix;
-
-                        if (Matrix4x4.Invert(hackParentBlendableMatrix, out var inverted))
+                        if (Matrix4x4.Invert(parentMatrix, out var inverted))
                         {
                             hackNewBlendableMatrix *= inverted;
                         }
@@ -175,21 +178,7 @@ namespace Ds3FbxSharp
                             throw new Exception();
                         }
                     }
-                    //else
-                    //{
-                    //    if (anim.RootMotion != null)
-                    //    {
-                    //        var rootMotion = anim.RootMotion.ExtractRootMotion(0, frameIndex / anim.Duration);
-
-                    //        var rootMotionMatrix = Matrix4x4.CreateRotationY(rootMotion.directionChange);
-                    //        rootMotionMatrix *= Matrix4x4.CreateTranslation(rootMotion.positionChange);
-
-                    //        hackNewBlendableMatrix *= rootMotionMatrix;
-                    //    }
-                    //}
-
-
-                    if (bone.parent == null)
+                    else
                     {
                         Func<Matrix4x4> getRefMatrix = () => {
                             if (Souls.animRefFrame == null)
@@ -207,9 +196,12 @@ namespace Ds3FbxSharp
                         // this is a root bone
                         if (anim.RootMotion != null)
                         {
-                            var rootMotion = anim.RootMotion.ExtractRootMotion(0, frameIndex);
-                            Matrix4x4 rootMotionTransformation = Matrix4x4.CreateTranslation(rootMotion.positionChange) * Matrix4x4.CreateRotationY(rootMotion.directionChange);
-                            additionalPostTransformation = rootMotionTransformation * additionalPostTransformation;
+                            var rootMotion = anim.RootMotion.ExtractRootMotion(0, anim.Duration * (((float)frameIndex / anim.FrameCount)));
+                            
+                            rootMotion.positionChange.Z = -rootMotion.positionChange.Z;
+
+                            Matrix4x4 rootMotionTransformation = Matrix4x4.CreateRotationY(rootMotion.directionChange) * Matrix4x4.CreateTranslation(rootMotion.positionChange);
+                            additionalPostTransformation *= rootMotionTransformation;
                         }
 
                         hackNewBlendableMatrix *= additionalPostTransformation;
@@ -223,9 +215,9 @@ namespace Ds3FbxSharp
 
                     var euler = new Quaternion(newBlendableTransform.Rotation.X, newBlendableTransform.Rotation.Y, newBlendableTransform.Rotation.Z, newBlendableTransform.Rotation.W).QuaternionToEuler();
 
-                    animExportHelper.translation.AddPoint(time, new Vector3(newBlendableTransform.Translation.X, newBlendableTransform.Translation.Y, newBlendableTransform.Translation.Z));
+                    animExportHelper.translation.AddPoint(time, newBlendableTransform.Translation);
                     animExportHelper.rotation.AddPoint(time, euler);
-                    animExportHelper.scale.AddPoint(time, new Vector3(newBlendableTransform.Scale.X, newBlendableTransform.Scale.Y, newBlendableTransform.Scale.Z));
+                    animExportHelper.scale.AddPoint(time, newBlendableTransform.Scale);
                 }
             }
 
