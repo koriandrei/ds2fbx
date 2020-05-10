@@ -63,6 +63,19 @@ namespace Ds3FbxSharp
                 }
             }
             
+            foreach (var ddd in rawBoneDeformerData.GroupBy(boneDeformerData=>boneDeformerData.vertexIndex).Select(boneDeformedGroup=>(vertexIndex: boneDeformedGroup.Key, affectingBonesCount: boneDeformedGroup.Count())).Where((ddd)=>ddd.affectingBonesCount > 4))
+            {
+                System.Console.WriteLine($"Vertex {ddd.vertexIndex} : {ddd.affectingBonesCount}");
+            }
+
+            foreach (var ddd in rawBoneDeformerData.GroupBy(boneDeformedData => boneDeformedData.flverBoneIndex).Select(boneDeformerGroup=>(boneIndex: boneDeformerGroup.Key, affectingVerticesCount: boneDeformerGroup.Count(), uniqueAffectingVerticesCount: boneDeformerGroup.Select(boneDeformerData=>boneDeformerData.vertexIndex).Distinct().Count())))
+            {
+                if (ddd.affectingVerticesCount != ddd.uniqueAffectingVerticesCount)
+                {
+                    System.Console.WriteLine($"Bone {ddd.boneIndex} : vertices {ddd.affectingVerticesCount} : unique {ddd.uniqueAffectingVerticesCount}");
+                }
+            }
+
             FbxSkin skin = FbxSkin.Create(Owner, meshData.meshRoot.Name + "_Skin");
 
             System.Console.WriteLine($"Generating {meshData.meshRoot.Name}");

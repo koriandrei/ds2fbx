@@ -146,29 +146,8 @@ namespace Ds3FbxSharp
                 {
                     var calculatedMatrix = GetMatrix(bone.exportData.SoulsData.HkxBoneIndex, frameIndex);
 
-                    var hackPreMatrix = Matrix4x4.Identity; // * Matrix4x4.CreateRotationY((float)(-Math.PI / 2)); ; // Microsoft.Xna.Framework.Matrix.CreateScale(-1, 1, 1);
-                    var hackPostMatrix = Matrix4x4.Identity; // * Matrix4x4.CreateRotationY((float)(Math.PI)); // Matrix4x4.CreateScale(1, 1, -1);
-
-                    if (bone.parent == null)
-                    {
-                        //var unrotateRoot = Microsoft.Xna.Framework.Matrix.CreateRotationZ((float)(Math.PI / 2)) * Microsoft.Xna.Framework.Matrix.CreateRotationY(-(float)(Math.PI / 2));
-                        if (Matrix4x4.Invert(calculatedMatrix, out var inverted))
-                        {
-                            //hackPostMatrix =inverted *Matrix4x4.CreateRotationX((float)(-Math.PI / 2)) * hackPostMatrix;
-                        }
-                        else
-                        {
-                            throw new Exception();
-                        }
-                    }
-                    else
-                    {
-                        var translation = calculatedMatrix.Translation;
-
-                        translation.Z = -translation.Z;
-
-                        calculatedMatrix.Translation = translation;
-                    }
+                    var hackPreMatrix = Matrix4x4.CreateRotationZ((float)(-Math.PI/2)); // * Matrix4x4.CreateRotationY((float)(-Math.PI / 2)); ; // Microsoft.Xna.Framework.Matrix.CreateScale(-1, 1, 1);
+                    var hackPostMatrix = Matrix4x4.CreateScale(-1,1,1); // * Matrix4x4.CreateRotationY((float)(Math.PI)); // Matrix4x4.CreateScale(1, 1, -1);
 
                     return hackPreMatrix * calculatedMatrix * hackPostMatrix;
                 };
@@ -208,6 +187,33 @@ namespace Ds3FbxSharp
                     //        hackNewBlendableMatrix *= rootMotionMatrix;
                     //    }
                     //}
+
+
+                    if (bone.parent == null)
+                    {
+                        Func<Matrix4x4> getRefMatrix = () => {
+                            if (Souls.animRefFrame == null)
+                            {
+                                return Matrix4x4.Identity;
+                            }
+
+                            return Matrix4x4.CreateWorld(Vector3.Zero, Souls.animRefFrame.Forward.ToVector3(), Souls.animRefFrame.Up.ToVector3());
+                        };
+
+                        var refMatrix = getRefMatrix();
+
+                        Matrix4x4 additionalPostTransformation = refMatrix;
+
+                        // this is a root bone
+                        if (anim.RootMotion != null)
+                        {
+                            var rootMotion = anim.RootMotion.ExtractRootMotion(0, frameIndex);
+                            Matrix4x4 rootMotionTransformation = Matrix4x4.CreateTranslation(rootMotion.positionChange) * Matrix4x4.CreateRotationY(rootMotion.directionChange);
+                            additionalPostTransformation = rootMotionTransformation * additionalPostTransformation;
+                        }
+
+                        hackNewBlendableMatrix *= additionalPostTransformation;
+                    }
 
                     var newBlendableTransform = new NewBlendableTransform(hackNewBlendableMatrix);
 

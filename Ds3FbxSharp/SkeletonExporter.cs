@@ -49,7 +49,7 @@ namespace Ds3FbxSharp
         {
             FbxSkeleton fbxBone = FbxSkeleton.Create(scene, bone.Name + "Bone");
 
-            fbxBone.SetSkeletonType(flverBone.ChildIndex >= 0 ? FbxSkeleton.EType.eLimb : FbxSkeleton.EType.eEffector);
+            fbxBone.SetSkeletonType(flverBone.ChildIndex >= 0 ? FbxSkeleton.EType.eLimbNode : FbxSkeleton.EType.eEffector);
 
             fbxBone.Size.Set(flverBone.Translation.Length());
 
@@ -178,9 +178,9 @@ namespace Ds3FbxSharp
             {
                 Matrix4x4 rawGlobalTransform = CalculateGlobalTransform(boneData, Flver, hkaSkeleton);
 
-                var preFixupMatrix = Matrix4x4.CreateScale(new Vector3(1, 1, 1)); // * Matrix4x4.CreateRotationX((float)(-Math.PI)) * Matrix4x4.CreateRotationY((float)(-Math.PI / 2)) * Matrix4x4.CreateRotationZ((float)(Math.PI / 2));
+                var preFixupMatrix = Matrix4x4.CreateRotationZ((float)(-Math.PI / 2)); // Matrix4x4.CreateScale(new Vector3(1, 1, 1)); // * Matrix4x4.CreateRotationX((float)(-Math.PI)) * Matrix4x4.CreateRotationY((float)(-Math.PI / 2)) * Matrix4x4.CreateRotationZ((float)(Math.PI / 2));
 
-                var postFixupMatrix = Matrix4x4.CreateScale(new Vector3(1, 1, 1));// * Matrix4x4.CreateRotationX((float)(-Math.PI / 2)) * Matrix4x4.CreateRotationZ((float)(Math.PI / 2));
+                var postFixupMatrix = Matrix4x4.CreateScale(1,1,-1); // Matrix4x4.CreateRotationZ((float)(Math.PI / 2)); // Matrix4x4.CreateScale(new Vector3(1, 1, 1));// * Matrix4x4.CreateRotationX((float)(-Math.PI / 2)) * Matrix4x4.CreateRotationZ((float)(Math.PI / 2));
 
                 if (boneData.parent == null)
                 {
@@ -192,10 +192,12 @@ namespace Ds3FbxSharp
                 }
                 else
                 {
-                    var t = rawGlobalTransform.Translation;
-                    t.Z = -t.Z;
-                    rawGlobalTransform.Translation = t;
                 }
+
+
+                //var t = rawGlobalTransform.Translation;
+                //t.Z = -t.Z;
+                //rawGlobalTransform.Translation = t;
 
                 return preFixupMatrix * rawGlobalTransform * postFixupMatrix;
             };

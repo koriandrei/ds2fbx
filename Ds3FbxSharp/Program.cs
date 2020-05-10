@@ -168,6 +168,7 @@ where T3 : HKX.HKXObject
                 meshes = meshFlver?.Meshes.Select(mesh => new MeshExportData() { mesh = mesh, meshRoot = meshFlver.Bones[mesh.DefaultBoneIndex] })
                     .Select(meshExportData => new MeshExporter(scene, meshExportData))
                     .Select(exporter => exporter.Fbx.CreateExportData(exporter.Souls))
+                    //.Take(1)
                     .ToList();
 
                 if (meshes != null)
@@ -235,7 +236,7 @@ where T3 : HKX.HKXObject
                 const int animsToTake = 5;
 
                 int index = 0;
-                foreach (var animData in GetHkxObjects<HKX.HKASplineCompressedAnimation, HKX.HKASplineCompressedAnimation, HKX.HKADefaultAnimatedReferenceFrame>(hkxs).ToList().Take(animsToTake))
+                foreach (var animData in GetHkxObjects<HKX.HKASplineCompressedAnimation, HKX.HKASplineCompressedAnimation, HKX.HKADefaultAnimatedReferenceFrame>(hkxs).ToList().Skip(18).Take(animsToTake))
                 {
                     b(animData.Item1, animData.Item3, index++);
                 }

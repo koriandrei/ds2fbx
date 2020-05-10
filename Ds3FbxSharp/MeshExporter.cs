@@ -160,7 +160,7 @@ namespace Ds3FbxSharp
             layer.SetTangents(tangent);
             tangent.SetReferenceMode(FbxLayerElement.EReferenceMode.eDirect);
             tangent.SetMappingMode(FbxLayerElement.EMappingMode.eByControlPoint);
-
+            
             for (int vertexIndex = 0; vertexIndex < Souls.mesh.Vertices.Count; ++vertexIndex)
             {
                 FLVER.Vertex vertex = Souls.mesh.Vertices[vertexIndex];
