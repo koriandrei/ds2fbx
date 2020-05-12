@@ -110,9 +110,32 @@ namespace Ds3FbxSharp
             return currentTransformMatrix;
         }
 
+        class FrameData
+        {
+            public class FrameBoneData
+            {
+                public int hkxBoneIndex;
+                public NewBlendableTransform transform;
+            }
+
+            public int frameIndex;
+
+            public IEnumerable<FrameBoneData> boneDatas;
+        }
+
+        public class AnimationExportException : Exception
+        {
+            public AnimationExportException(string message, Exception innerException) : base(message, innerException)
+            {
+            }
+        }
+
         protected override FbxAnimStack GenerateFbx()
         {
             HavokAnimationData anim = Souls.dsAnimation;
+
+            IDictionary<int, FrameData> frameDatas = ExtractAnimationData(anim);
+
             var animStack = FbxAnimStack.Create(Scene, anim.Name + "_AnimStack");
 
             animStack.SetLocalTimeSpan(new FbxTimeSpan(FbxTime.FromFrame(0), FbxTime.FromFrame(anim.FrameCount)));
@@ -138,78 +161,15 @@ namespace Ds3FbxSharp
                 );
             }
 
-            for (int frameIndex = 0; frameIndex < Souls.dsAnimation.FrameCount; ++frameIndex)
+            foreach (var frameData in frameDatas)
             {
-                FbxTime time = FbxTime.FromFrame(frameIndex);
+                FbxTime time = FbxTime.FromFrame(frameData.Key);
 
-                Func<DsBoneData, Matrix4x4> calculateTransform = bone =>
+                foreach (var boneData in frameData.Value.boneDatas)
                 {
-                    if (bone.parent == null)
-                    {
-                        return Matrix4x4.Identity;
-                    }
+                    int hkxBoneIndex = boneData.hkxBoneIndex;
 
-                    var calculatedMatrix = GetMatrix(bone.exportData.SoulsData.HkxBoneIndex, frameIndex);
-
-                    var hackPreMatrix = Matrix4x4.CreateRotationZ((float)(-Math.PI/2)); // * Matrix4x4.CreateRotationY((float)(-Math.PI / 2)); ; // Microsoft.Xna.Framework.Matrix.CreateScale(-1, 1, 1);
-                    var hackPostMatrix = Matrix4x4.CreateScale(-1, 1, 1); // Matrix4x4.CreateScale(-1,1,1); // * Matrix4x4.CreateRotationY((float)(Math.PI)); // Matrix4x4.CreateScale(1, 1, -1);
-
-                    var transformedMatrix = hackPreMatrix * calculatedMatrix * hackPostMatrix;
-                    
-                    return transformedMatrix;
-                };
-
-                foreach (var bone in Souls.skeleton.boneDatas)
-                {
-                    var calculatedMatrix = calculateTransform(bone);
-
-                    var hackNewBlendableMatrix = calculatedMatrix;
-
-                    if (bone.parent != null)
-                    {
-                        Matrix4x4 parentMatrix = calculateTransform(bone.parent);
-
-                        if (Matrix4x4.Invert(parentMatrix, out var inverted))
-                        {
-                            hackNewBlendableMatrix *= inverted;
-                        }
-                        else
-                        {
-                            throw new Exception();
-                        }
-                    }
-                    else
-                    {
-                        Func<Matrix4x4> getRefMatrix = () => {
-                            if (Souls.animRefFrame == null)
-                            {
-                                return Matrix4x4.Identity;
-                            }
-
-                            return Matrix4x4.CreateWorld(Vector3.Zero, Souls.animRefFrame.Forward.ToVector3(), Souls.animRefFrame.Up.ToVector3());
-                        };
-
-                        var refMatrix = getRefMatrix();
-
-                        Matrix4x4 additionalPostTransformation = refMatrix;
-
-                        // this is a root bone
-                        if (anim.RootMotion != null)
-                        {
-                            var rootMotion = anim.RootMotion.ExtractRootMotion(0, anim.Duration * (((float)frameIndex / anim.FrameCount)));
-                            
-                            rootMotion.positionChange.Z = -rootMotion.positionChange.Z;
-
-                            Matrix4x4 rootMotionTransformation = Matrix4x4.CreateRotationY(rootMotion.directionChange) * Matrix4x4.CreateTranslation(rootMotion.positionChange);
-                            additionalPostTransformation *= rootMotionTransformation;
-                        }
-
-                        hackNewBlendableMatrix *= additionalPostTransformation;
-                    }
-
-                    var newBlendableTransform = new NewBlendableTransform(hackNewBlendableMatrix);
-
-                    int hkxBoneIndex = bone.exportData.SoulsData.HkxBoneIndex;
+                    var newBlendableTransform = boneData.transform;
 
                     AnimExportHelper animExportHelper = boneHelpers[hkxBoneIndex];
 
@@ -229,6 +189,117 @@ namespace Ds3FbxSharp
             }
 
             return null;
+        }
+
+        private IDictionary<int, FrameData> ExtractAnimationData(HavokAnimationData anim)
+        {
+            IDictionary<int, FrameData> frameDatas = new Dictionary<int, FrameData>();
+
+            try
+            {
+
+
+                for (int frameIndex = 0; frameIndex < Souls.dsAnimation.FrameCount; ++frameIndex)
+                {
+                    var frameBoneDatas = new List<FrameData.FrameBoneData>();
+
+                    FrameData data = new FrameData() { boneDatas = frameBoneDatas, frameIndex = frameIndex };
+
+
+
+                    Func<DsBoneData, Matrix4x4> calculateTransform = bone =>
+                    {
+                        if (bone.parent == null)
+                        {
+                            return Matrix4x4.Identity;
+                        }
+
+                        var calculatedMatrix = GetMatrix(bone.exportData.SoulsData.HkxBoneIndex, frameIndex);
+
+                        var hackPreMatrix = Matrix4x4.CreateRotationZ((float)(-Math.PI / 2)); // * Matrix4x4.CreateRotationY((float)(-Math.PI / 2)); ; // Microsoft.Xna.Framework.Matrix.CreateScale(-1, 1, 1);
+                    var hackPostMatrix = Matrix4x4.Identity; // Matrix4x4.CreateScale(-1, 1, 1); // Matrix4x4.CreateScale(-1,1,1); // * Matrix4x4.CreateRotationY((float)(Math.PI)); // Matrix4x4.CreateScale(1, 1, -1);
+
+                    var transformedMatrix = hackPreMatrix * calculatedMatrix * hackPostMatrix;
+
+                        var btr = new NewBlendableTransform(transformedMatrix);
+
+                        btr.Translation.Z = -btr.Translation.Z;
+                        btr.Rotation.X = -btr.Rotation.X;
+                        btr.Rotation.Y = -btr.Rotation.Y;
+
+                        return btr.GetMatrix();
+                    };
+
+                    foreach (var bone in Souls.skeleton.boneDatas)
+                    {
+                        var boneData111 = new FrameData.FrameBoneData() { hkxBoneIndex = bone.exportData.SoulsData.HkxBoneIndex };
+
+                        var calculatedMatrix = calculateTransform(bone);
+
+                        var hackNewBlendableMatrix = calculatedMatrix;
+
+                        if (bone.parent != null)
+                        {
+                            Matrix4x4 parentMatrix = calculateTransform(bone.parent);
+
+                            if (Matrix4x4.Invert(parentMatrix, out var inverted))
+                            {
+                                hackNewBlendableMatrix *= inverted;
+                            }
+                            else
+                            {
+                                throw new Exception();
+                            }
+                        }
+                        else
+                        {
+                            Func<Matrix4x4> getRefMatrix = () =>
+                            {
+                                if (Souls.animRefFrame == null)
+                                {
+                                    return Matrix4x4.Identity;
+                                }
+
+                                return Matrix4x4.CreateWorld(Vector3.Zero, Souls.animRefFrame.Forward.ToVector3(), Souls.animRefFrame.Up.ToVector3());
+                            };
+
+                            var refMatrix = Matrix4x4.Identity; // getRefMatrix();
+
+                            Matrix4x4 additionalPostTransformation = refMatrix;
+
+                            // this is a root bone
+                            if (anim.RootMotion != null)
+                            {
+                                var rootMotion = anim.RootMotion.ExtractRootMotion(0, anim.Duration * (((float)frameIndex / anim.FrameCount)));
+
+                                rootMotion.positionChange.Z = -rootMotion.positionChange.Z;
+
+                                Matrix4x4 rootMotionTransformation = Matrix4x4.CreateRotationY(rootMotion.directionChange) * Matrix4x4.CreateTranslation(rootMotion.positionChange);
+                                additionalPostTransformation *= rootMotionTransformation;
+                            }
+
+                            hackNewBlendableMatrix *= additionalPostTransformation;
+                        }
+
+                        var newBlendableTransform = new NewBlendableTransform(hackNewBlendableMatrix);
+
+                        int hkxBoneIndex = bone.exportData.SoulsData.HkxBoneIndex;
+
+                        boneData111.hkxBoneIndex = hkxBoneIndex;
+                        boneData111.transform = newBlendableTransform;
+
+                        frameBoneDatas.Add(boneData111);
+                    }
+
+                    frameDatas.Add(frameIndex, data);
+                }
+
+                return frameDatas;
+            }
+            catch (Exception ex)
+            {
+                throw new AnimationExportException("An exception occured while exporting animations!", ex);
+            }
         }
     }
 }

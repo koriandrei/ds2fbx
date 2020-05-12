@@ -131,21 +131,34 @@ where T3 : HKX.HKXObject
                 .Select(path => new BND4Reader(path))
                 .SelectMany(bndReader => bndReader.Files
                     .Where(file => ShouldReadFile(file, options))
-                    .Select(file => bndReader.ReadFile(file))
+                    .Select(file => (header: file, contents: bndReader.ReadFile(file)))
                 )
-                .ToLookup(GetModelDataType)
+                .ToLookup(t => GetModelDataType(t.contents))
                 ;
 
             Console.WriteLine("Loaded files");
 
-            FLVER2 meshFlver = fileLookup[ModelDataType.Flver].Select(FLVER2.Read).Where(flver => flver.Meshes.Count > 0).FirstOrDefault();
+            FLVER2 meshFlver = fileLookup[ModelDataType.Flver].Select(t => FLVER2.Read(t.contents)).Where(flver => flver.Meshes.Count > 0).FirstOrDefault();
 
             if (meshFlver == null && options.Exports.Contains(Options.Export.Mesh))
             {
                 throw new Exception("No flver with at least one mesh could be found, cannot export meshes");
             }
 
-            var hkxs = fileLookup[ModelDataType.Hkx].Select(HKX.Read);
+            var regexR1 = new System.Text.RegularExpressions.Regex(@".*a0\d\d_03[04]0[0-2]0.hkx");
+            var regexR2 = new System.Text.RegularExpressions.Regex(@".*a0\d\d_03[04]3[24][0-1].hkx");
+            var regexRunning = new System.Text.RegularExpressions.Regex(@".*a0\d\d_030[569]00.hkx");
+            var regexWA = new System.Text.RegularExpressions.Regex(@".*a0\d\d_036\d\d\d.hkx");
+
+            Func< (BinderFileHeader header, byte[] contents), bool> filterHkxs = (t) => {
+                if (t.header.Name.Contains("keleton"))
+                {
+                    return true;
+                }
+                return new[] { regexR1, regexR2, /*regexRunning, regexWA,*/ }.Any(r => r.IsMatch(t.header.Name));
+            };
+
+            var hkxs = fileLookup[ModelDataType.Hkx].Where(t=>!t.header.Name.EndsWith("2000_c.hkx")).Where(filterHkxs).Select(t => HKX.Read(t.contents)).ToArray();
             var skeletons = GetHkxObjects<HKX.HKASkeleton>(hkxs);
 
             HKX.HKASkeleton hkaSkeleton = skeletons.FirstOrDefault();
@@ -224,19 +237,25 @@ where T3 : HKX.HKXObject
 
                 Func<HKX.HKASplineCompressedAnimation, HKX.HKADefaultAnimatedReferenceFrame, int, bool> b = ((animation, refFrame, animIndex) =>
                 {
-                    SFAnimExtensions.Havok.HavokAnimationData anim = new SFAnimExtensions.Havok.HavokAnimationData_SplineCompressed(animIndex.ToString(), hkaSkeleton, refFrame, binding, animation);
+                    SFAnimExtensions.Havok.HavokAnimationData anim = new SFAnimExtensions.Havok.HavokAnimationData_SplineCompressed(animIndex.ToString("0000"), hkaSkeleton, refFrame, binding, animation);
 
                     var animExporter = new AnimationExporter(scene, new AnimationExportData() { dsAnimation = anim, animRefFrame = refFrame, hkaAnimationBinding = binding, skeleton = skeleton, name = animIndex.ToString() });
 
-                    var dummy = animExporter.Fbx;
-
-                    return dummy == null;
+                    try
+                    {
+                        var dummy = animExporter.Fbx;
+                    }
+                    catch (AnimationExporter.AnimationExportException)
+                    {
+                        System.Console.WriteLine("Eh, an animation will be skipped");
+                    }
+                    return true;
                 });
 
-                const int animsToTake = 5;
+                const int animsToTake = 50;
 
                 int index = 0;
-                foreach (var animData in GetHkxObjects<HKX.HKASplineCompressedAnimation, HKX.HKASplineCompressedAnimation, HKX.HKADefaultAnimatedReferenceFrame>(hkxs).ToList().Skip(18).Take(animsToTake))
+                foreach (var animData in GetHkxObjects<HKX.HKASplineCompressedAnimation, HKX.HKASplineCompressedAnimation, HKX.HKADefaultAnimatedReferenceFrame>(hkxs).ToList().Skip(0).Take(animsToTake))
                 {
                     b(animData.Item1, animData.Item3, index++);
                 }

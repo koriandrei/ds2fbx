@@ -9,6 +9,8 @@ using Autodesk.Fbx;
 using System.Linq;
 using System.Numerics;
 
+using SFAnimExtensions.Havok;
+
 namespace Ds3FbxSharp
 {
     class DsSkeleton
@@ -180,7 +182,7 @@ namespace Ds3FbxSharp
 
                 var preFixupMatrix = Matrix4x4.CreateRotationZ((float)(-Math.PI / 2)); // Matrix4x4.CreateScale(new Vector3(1, 1, 1)); // * Matrix4x4.CreateRotationX((float)(-Math.PI)) * Matrix4x4.CreateRotationY((float)(-Math.PI / 2)) * Matrix4x4.CreateRotationZ((float)(Math.PI / 2));
 
-                var postFixupMatrix = Matrix4x4.CreateScale(1,1,-1); // Matrix4x4.CreateRotationZ((float)(Math.PI / 2)); // Matrix4x4.CreateScale(new Vector3(1, 1, 1));// * Matrix4x4.CreateRotationX((float)(-Math.PI / 2)) * Matrix4x4.CreateRotationZ((float)(Math.PI / 2));
+                var postFixupMatrix = Matrix4x4.CreateScale(1,1,1); // Matrix4x4.CreateRotationZ((float)(Math.PI / 2)); // Matrix4x4.CreateScale(new Vector3(1, 1, 1));// * Matrix4x4.CreateRotationX((float)(-Math.PI / 2)) * Matrix4x4.CreateRotationZ((float)(Math.PI / 2));
 
                 if (boneData.parent == null)
                 {
@@ -199,7 +201,15 @@ namespace Ds3FbxSharp
                 //t.Z = -t.Z;
                 //rawGlobalTransform.Translation = t;
 
-                return preFixupMatrix * rawGlobalTransform * postFixupMatrix;
+                var fixedTransform = preFixupMatrix * rawGlobalTransform * postFixupMatrix;
+
+                var btr = new NewBlendableTransform(fixedTransform);
+
+                btr.Translation.Z = -btr.Translation.Z;
+                btr.Rotation.X = -btr.Rotation.X;
+                btr.Rotation.Y = -btr.Rotation.Y;
+
+                return btr.GetMatrix();
             };
 
             //Func<DsBoneData, Matrix4x4> calculateParentTransform = (boneData) =>
