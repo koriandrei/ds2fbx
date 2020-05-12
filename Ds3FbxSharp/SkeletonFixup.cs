@@ -68,16 +68,16 @@ namespace Ds3FbxSharp
         {
             var skel = FixupDsBonesInternal(flver, hkx);
 
-            Func<DsBone, DsBone> boneConversion = bone => { 
+            Func<DsBone, DsBone> boneConversion = bone => {
                 //if (bone.Name == "Pelvis")
                 //{
                 //    bone.ParentName = "RootRotXZ";
                 //}
 
-                //if (bone.Name == "Spine")
-                //{
-                //    bone.ParentName = "Pelvis";
-                //}
+                if (bone.Name == "Spine")
+                {
+                    bone.ParentName = "Pelvis";
+                }
 
                 return bone;
             };

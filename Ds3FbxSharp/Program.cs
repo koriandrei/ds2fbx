@@ -155,7 +155,7 @@ where T3 : HKX.HKXObject
                 {
                     return true;
                 }
-                return new[] { regexR1, regexR2, /*regexRunning, regexWA,*/ }.Any(r => r.IsMatch(t.header.Name));
+                return new[] { regexR1, regexR2, regexRunning, /*regexWA,*/ }.Any(r => r.IsMatch(t.header.Name));
             };
 
             var hkxs = fileLookup[ModelDataType.Hkx].Where(t=>!t.header.Name.EndsWith("2000_c.hkx")).Where(filterHkxs).Select(t => HKX.Read(t.contents)).ToArray();
@@ -252,7 +252,7 @@ where T3 : HKX.HKXObject
                     return true;
                 });
 
-                const int animsToTake = 50;
+                const int animsToTake = 100;
 
                 int index = 0;
                 foreach (var animData in GetHkxObjects<HKX.HKASplineCompressedAnimation, HKX.HKASplineCompressedAnimation, HKX.HKADefaultAnimatedReferenceFrame>(hkxs).ToList().Skip(0).Take(animsToTake))
