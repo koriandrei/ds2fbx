@@ -59,10 +59,10 @@ namespace Ds3FbxSharp
             float cosy_cosp = 1 - 2 * (q.Y * q.Y + q.Z * q.Z);
             angles.Z = (float)Math.Atan2(siny_cosp, cosy_cosp);
 
-            if ((Math.Abs(Math.Abs(angles.X) - Math.Abs(angles.Z)) < 0.001) && (Math.Abs(Math.Abs(angles.X) - Math.PI) < 0.001))
-            {
-                angles.X = angles.Z = 0;
-            }
+            //if ((Math.Abs(Math.Abs(angles.X) - Math.Abs(angles.Z)) <0.001) && (Math.Abs(Math.Abs(angles.X) - Math.PI) < 0.001  ))
+            //{
+            //    angles.X = angles.Z = 0;
+            //}
 
             return angles * 180 / (float)Math.PI;
         }

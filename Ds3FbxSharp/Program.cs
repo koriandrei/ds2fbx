@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using SoulsFormats;
 using SFAnimExtensions;
 using System.Linq;
+using CommandLine;
 using SharpGLTF.Scenes;
 
 namespace Ds3FbxSharp
@@ -36,6 +37,42 @@ namespace Ds3FbxSharp
 
     class Program
     {
+        public class Options
+        {
+            [Option]
+            public string BasePath { get; set; }
+
+            [Option(Separator =',')]
+            public IEnumerable<string> Paths { get; set; }
+
+            [Option]
+            public string ModelId { get; set; }
+
+            public enum Export
+            {
+                Mesh,
+                Skeleton,
+                Skin,
+                Animation,
+            }
+
+            public static IEnumerable<Export> ExpandExports(Export export)
+            {
+                switch (export)
+                {
+                    case Export.Skin:
+                        return new[] { Export.Mesh, Export.Skeleton };
+                    case Export.Animation:
+                        return new[] { Export.Skeleton };
+                }
+
+                return Array.Empty<Export>();
+            }
+
+            [Option(Separator =',', Required = true)]
+            public IEnumerable<Export> Exports { get; set; }
+        }
+
         enum ModelDataType
         {
             Flver,
@@ -87,57 +124,59 @@ where T3 : HKX.HKXObject
             return hkxs.Select(GetHkxObjectsFromHkx<T1, T2, T3>).Where(tuple => tuple.Item1 != null && tuple.Item2 != null && tuple.Item3 != null);
         }
 
-        static void Main(string[] args)
+        static IEnumerable<string> GetPathsToLoad(Options options)
         {
-            //var reader = new SoulsFormats.BXF4Reader(@"G:\SteamLibrary\steamapps\common\DARK SOULS III\Game\Data1.bhd", @"G:\SteamLibrary\steamapps\common\DARK SOULS III\Game\Data1.bdt");
-            //FLVER2 flver = reader.Files.Where(file => file.Name.Contains("1300"))
-            //    .Select(file => reader.ReadFile(file))
-            //    .Select(fileContents => new BND4Reader(fileContents))
-            //    .SelectMany(bndReader => bndReader.Files.Select(file => bndReader.ReadFile(file)))
-            //    .Where(fileContents => FLVER2.Is(fileContents))
-            //    .Select(fileContents => FLVER2.Read(fileContents))
-            //    .First();
+            return options.Paths
+                .Select(path => System.IO.Path.IsPathRooted(path) ? path : System.IO.Path.Combine(options.BasePath, path))
+                .SelectMany(path => System.IO.File.Exists(path) ? new[] { path } : System.IO.Directory.GetFiles(path, "*.dcx"));
+        }
 
-            /*FLVER2 flver =*/
+        static bool ShouldReadFile(BinderFileHeader header, Options options)
+        {
+            return true;
+        }
 
-            string charToLookFor = "1300";
+        static int RunAndReturnExitCode(Options options)
+        {
+            string charToLookFor = "c1100";
 
-            if (args.Length > 0)
+            if (options.ModelId != null)
             {
-                charToLookFor = args[0];
+                charToLookFor = options.ModelId;
             }
 
-            var fileLookup = System.IO.Directory.GetFiles(@"F:\SteamLibrary\steamapps\common\DARK SOULS III\Game\chr\", string.Format(System.Globalization.CultureInfo.InvariantCulture, "*{0}*bnd.dcx", charToLookFor))
-                .Concat(charToLookFor.Equals("0000") ? System.IO.Directory.GetFiles(@"F:\SteamLibrary\steamapps\common\DARK SOULS III\Game\parts\", "bd_m_*bnd.dcx") : new string[0])
+            var fileLookup = GetPathsToLoad(options)
                 .Select(path => new BND4Reader(path))
-                .SelectMany(bndReader => bndReader.Files.Where(file =>
-                {
-                    if (file.Name.EndsWith("hkx"))
-                    {
-                        if (!charToLookFor.Equals("0000"))
-                        {
-                            return true;
-                        }
-
-                        bool isAnimHkx = file.Name.Substring(file.Name.LastIndexOf("\\") + 1).StartsWith("a10");
-
-                        return isAnimHkx;
-                    }
-                    return true;
-                }).Select(file => bndReader.ReadFile(file)))
-                //.ToList()
-                //.GroupBy(fileContents=>GetModelDataType(fileContents))
-                //.ToDictionary()
-                .ToLookup(GetModelDataType)
-                //.Where(fileContents => FLVER2.Is(fileContents))
-                //.Select(fileContents => FLVER2.Read(fileContents))
-                //.First()
+                .SelectMany(bndReader => bndReader.Files
+                    .Where(file => ShouldReadFile(file, options))
+                    .Select(file => (header: file, contents: bndReader.ReadFile(file)))
+                )
+                .ToLookup(t => GetModelDataType(t.contents))
                 ;
 
             Console.WriteLine("Loaded files");
 
-            FLVER2 flver = fileLookup[ModelDataType.Flver].Select(FLVER2.Read).Where(flver => flver.Meshes.Count > 0).First();//.ElementAt(7);
-            var hkxs = fileLookup[ModelDataType.Hkx].Select(HKX.Read);
+            FLVER2 meshFlver = fileLookup[ModelDataType.Flver].Select(t => FLVER2.Read(t.contents)).Where(flver => flver.Meshes.Count > 0).FirstOrDefault();
+
+            if (meshFlver == null && options.Exports.Contains(Options.Export.Mesh))
+            {
+                throw new Exception("No flver with at least one mesh could be found, cannot export meshes");
+            }
+
+            var regexR1 = new System.Text.RegularExpressions.Regex(@".*a0\d\d_03[04]0[0-2]0.hkx");
+            var regexR2 = new System.Text.RegularExpressions.Regex(@".*a0\d\d_03[04]3[24][0-1].hkx");
+            var regexRunning = new System.Text.RegularExpressions.Regex(@".*a0\d\d_030[569]00.hkx");
+            var regexWA = new System.Text.RegularExpressions.Regex(@".*a0\d\d_036\d\d\d.hkx");
+
+            Func< (BinderFileHeader header, byte[] contents), bool> filterHkxs = (t) => {
+                if (t.header.Name.Contains("keleton"))
+                {
+                    return true;
+                }
+                return new[] { regexR1, regexR2, regexRunning, /*regexWA,*/ }.Any(r => r.IsMatch(t.header.Name));
+            };
+
+            var hkxs = fileLookup[ModelDataType.Hkx].Where(t=>!t.header.Name.EndsWith("2000_c.hkx")).Where(filterHkxs).Select(t => HKX.Read(t.contents)).ToArray();
             var skeletons = GetHkxObjects<HKX.HKASkeleton>(hkxs);
 
             HKX.HKASkeleton hkaSkeleton = skeletons.FirstOrDefault();
@@ -151,42 +190,47 @@ where T3 : HKX.HKXObject
 
             MyExporter exporter = new GltfExporter(sceneBuilder);
 
-            var meshes = flver?.Meshes.Select(mesh => new MeshExportData() { mesh = mesh, meshRoot = flver.Bones[mesh.DefaultBoneIndex] })
-                .Select(meshExportData => new MeshExporter(exporter, meshExportData))
-                //.Select(exporter => exporter.Fbx.CreateExportData(exporter.Souls))
-                .ToList();
 
-            if (meshes != null)
+
+            // FbxNode sceneRoot = scene.GetRootNode();
+
+            IList<MeshExporter> meshes = null;
+
+            if (options.Exports.Contains(Options.Export.Mesh))
             {
-                foreach (var exportedMesh in meshes)
+                meshes = meshFlver?.Meshes.Select(mesh => new MeshExportData() { mesh = mesh, meshRoot = meshFlver.Bones[mesh.DefaultBoneIndex] })
+                    .Select(meshExportData => new MeshExporter(exporter, meshExportData))
+                    //.Select(exporter => exporter.Fbx.CreateExportData(exporter.Souls))
+                    //.Take(1)
+                    .ToList();
+
+                if (meshes != null)
                 {
-                    //var model = SharpGLTF.Schema2.ModelRoot.CreateModel();
-                    sceneBuilder.AddRigidMesh(exportedMesh.Fbx.GetMesh(), SharpGLTF.Transforms.AffineTransform.Identity);
-                    //sceneRoot.AddChild(exportedMesh.FbxNode);
+                    foreach (var exportedMesh in meshes)
+                    {
+                        //var model = SharpGLTF.Schema2.ModelRoot.CreateModel();
+                        sceneBuilder.AddRigidMesh(exportedMesh.Fbx.GetMesh(), SharpGLTF.Transforms.AffineTransform.Identity);
+                        //sceneRoot.AddChild(exportedMesh.FbxNode);
+                    }
                 }
-            }
-            Console.WriteLine("Exported meshes");
-
-            List<DsBone> bones = SkeletonFixup.FixupDsBones(flver, hkaSkeleton).ToList();
-
-            DsSkeleton skeleton = new SkeletonExporter(exporter, flver, hkaSkeleton, bones).ParseSkeleton();
-
-            Console.WriteLine("Exported skeleton");
-
-#if false
-            if (meshes != null)
-            {
-                foreach (var meshData in meshes)
-                {
-                    FbxSkin generatedSkin = new SkinExporter(meshData.FbxData, new SkinExportData(meshData.SoulsData, skeleton, flver)).Fbx;
-                    meshData.FbxData.AddDeformer(generatedSkin);
-                };
+                Console.WriteLine("Exported meshes");
             }
 
-            Console.WriteLine("Exported skin");
+            DsSkeleton skeleton = null;
 
+            if (options.Exports.Contains(Options.Export.Skeleton))
             {
-                FbxPose pose = FbxPose.Create(scene, "Pose");
+                List<DsBone> bones = SkeletonFixup.FixupDsBones(meshFlver, hkaSkeleton).ToList();
+
+                skeleton = new SkeletonExporter(exporter, meshFlver, hkaSkeleton, bones).ParseSkeleton();
+
+                Console.WriteLine("Exported skeleton");
+
+#if true
+            }
+#else
+
+            FbxPose pose = FbxPose.Create(scene, "Pose");
 
                 pose.SetIsBindPose(true);
 
@@ -197,27 +241,49 @@ where T3 : HKX.HKXObject
                 }
 
                 scene.AddPose(pose);
+
+                Console.WriteLine("Exported pose");
             }
 
-            Console.WriteLine("Exporting animations...");
-
-            Func<HKX.HKASplineCompressedAnimation, HKX.HKADefaultAnimatedReferenceFrame, int, bool> b = ((animation, refFrame, animIndex) =>
+            if (options.Exports.Contains(Options.Export.Skin))
             {
-                SFAnimExtensions.Havok.HavokAnimationData anim = new SFAnimExtensions.Havok.HavokAnimationData_SplineCompressed(animIndex.ToString(), hkaSkeleton, refFrame, binding, animation);
+                foreach (var meshData in meshes)
+                {
+                    FbxSkin generatedSkin = new SkinExporter(meshData.FbxData, new SkinExportData(meshData, skeleton, meshFlver)).Fbx;
+                    meshData.FbxData.AddDeformer(generatedSkin);
+                };
 
-                var animExporter = new AnimationExporter(scene, new AnimationExportData() { dsAnimation = anim, animRefFrame = refFrame, hkaAnimationBinding = binding, skeleton = skeleton, name = animIndex.ToString() });
+                Console.WriteLine("Exported skin");
+            }
 
-                var dummy = animExporter.Fbx;
-
-                return dummy == null;
-            });
-
-            const int animsToTake = 5;
-
-            int index = 0;
-            foreach (var animData in GetHkxObjects<HKX.HKASplineCompressedAnimation, HKX.HKASplineCompressedAnimation, HKX.HKADefaultAnimatedReferenceFrame>(hkxs).ToList().Take(animsToTake))
+            if (options.Exports.Contains(Options.Export.Animation))
             {
-                b(animData.Item1, animData.Item3, index++);
+                Console.WriteLine("Exporting animations...");
+
+                Func<HKX.HKASplineCompressedAnimation, HKX.HKADefaultAnimatedReferenceFrame, int, bool> b = ((animation, refFrame, animIndex) =>
+                {
+                    SFAnimExtensions.Havok.HavokAnimationData anim = new SFAnimExtensions.Havok.HavokAnimationData_SplineCompressed(animIndex.ToString("0000"), hkaSkeleton, refFrame, binding, animation);
+
+                    var animExporter = new AnimationExporter(scene, new AnimationExportData() { dsAnimation = anim, animRefFrame = refFrame, hkaAnimationBinding = binding, skeleton = skeleton, name = animIndex.ToString() });
+
+                    try
+                    {
+                        var dummy = animExporter.Fbx;
+                    }
+                    catch (AnimationExporter.AnimationExportException)
+                    {
+                        System.Console.WriteLine("Eh, an animation will be skipped");
+                    }
+                    return true;
+                });
+
+                const int animsToTake = 100;
+
+                int index = 0;
+                foreach (var animData in GetHkxObjects<HKX.HKASplineCompressedAnimation, HKX.HKASplineCompressedAnimation, HKX.HKADefaultAnimatedReferenceFrame>(hkxs).ToList().Skip(0).Take(animsToTake))
+                {
+                    b(animData.Item1, animData.Item3, index++);
+                }
             }
 
             PrintFbxNode(sceneRoot);
@@ -235,6 +301,23 @@ where T3 : HKX.HKXObject
             scene.SaveGLTF(charToLookFor + "_exported.gltf");
 
             Console.WriteLine("All done");
+
+            return 0;
+        }
+
+        static int Main(string[] args)
+        {
+            return Parser.Default.ParseArguments<Options>(args).MapResult(options => RunAndReturnExitCode(CookOptions(options)), error=>1);
+        }
+
+        private static Options CookOptions(Options options)
+        {
+            return new Options() { BasePath = options.BasePath, ModelId = options.ModelId, Paths = options.Paths, Exports = CookExports(options.Exports) };
+        }
+
+        private static IEnumerable<Options.Export> CookExports(IEnumerable<Options.Export> exports)
+        {
+            return exports.SelectMany(export => new[] { export }.Concat(Options.ExpandExports(export))).ToHashSet();
         }
     }
 }

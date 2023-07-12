@@ -10,6 +10,8 @@ using System.Linq;
 using System.Numerics;
 using SharpGLTF.Scenes;
 
+using SFAnimExtensions.Havok;
+
 namespace Ds3FbxSharp
 {
     using FbxNode = SharpGLTF.Scenes.NodeBuilder;
@@ -74,7 +76,7 @@ namespace Ds3FbxSharp
         {
             var gltfBone = new SharpGLTF.Scenes.NodeBuilder(bone.Name + "_Bone");
 
-            //fbxBone.SetSkeletonType(flverBone.ChildIndex >= 0 ? FbxSkeleton.EType.eLimb : FbxSkeleton.EType.eEffector);
+            //fbxBone.SetSkeletonType(flverBone.ChildIndex >= 0 ? FbxSkeleton.EType.eLimbNode : FbxSkeleton.EType.eEffector);
 
             //fbxBone.Size.Set(flverBone.Translation.Length());
 
@@ -204,34 +206,36 @@ namespace Ds3FbxSharp
             {
                 Matrix4x4 rawGlobalTransform = CalculateGlobalTransform(boneData, Flver, hkaSkeleton);
 
-                var preFixupMatrix = Matrix4x4.CreateScale(new Vector3(1, 1, 1)); // * Matrix4x4.CreateRotationX((float)(-Math.PI)) * Matrix4x4.CreateRotationY((float)(-Math.PI / 2)) * Matrix4x4.CreateRotationZ((float)(Math.PI / 2));
+                var preFixupMatrix = Matrix4x4.CreateRotationZ((float)(-Math.PI / 2)); // Matrix4x4.CreateScale(new Vector3(1, 1, 1)); // * Matrix4x4.CreateRotationX((float)(-Math.PI)) * Matrix4x4.CreateRotationY((float)(-Math.PI / 2)) * Matrix4x4.CreateRotationZ((float)(Math.PI / 2));
 
-                var postFixupMatrix = Matrix4x4.CreateScale(new Vector3(1, 1, 1));// * Matrix4x4.CreateRotationX((float)(-Math.PI / 2)) * Matrix4x4.CreateRotationZ((float)(Math.PI / 2));
+                var postFixupMatrix = Matrix4x4.CreateScale(1,1,1); // Matrix4x4.CreateRotationZ((float)(Math.PI / 2)); // Matrix4x4.CreateScale(new Vector3(1, 1, 1));// * Matrix4x4.CreateRotationX((float)(-Math.PI / 2)) * Matrix4x4.CreateRotationZ((float)(Math.PI / 2));
 
                 if (boneData.parent == null)
                 {
                     Matrix4x4 preFixupParent = Matrix4x4.Identity;
-                    Matrix4x4 postFixupParent = Matrix4x4.Identity * Matrix4x4.CreateRotationX((float)(-Math.PI / 2)) * Matrix4x4.CreateRotationZ((float)(Math.PI / 2)); ; //* Matrix4x4.CreateScale(1,1,-1);
+                    Matrix4x4 postFixupParent = Matrix4x4.Identity; // * Matrix4x4.CreateRotationX((float)(-Math.PI / 2)) * Matrix4x4.CreateRotationZ((float)(Math.PI / 2)); ; //* Matrix4x4.CreateScale(1,1,-1);
 
                     preFixupMatrix *= preFixupParent;
                     postFixupMatrix *= postFixupParent;
                 }
                 else
                 {
-                    if (Matrix4x4.Decompose(rawGlobalTransform, out Vector3 scale, out Quaternion rotation, out Vector3 translation))
-                    {
-                        translation.Z = -translation.Z;
-
-                        rawGlobalTransform = Matrix4x4.CreateScale(scale) * Matrix4x4.CreateFromQuaternion(rotation) * Matrix4x4.CreateTranslation(translation);
-                    }
-                    else
-                    {
-                        throw new Exception();
-                    }
-                    //postFixupMatrix *= Matrix4x4.CreateScale(1, 1, -1);
                 }
 
-                return preFixupMatrix * rawGlobalTransform * postFixupMatrix;
+
+                //var t = rawGlobalTransform.Translation;
+                //t.Z = -t.Z;
+                //rawGlobalTransform.Translation = t;
+
+                var fixedTransform = preFixupMatrix * rawGlobalTransform * postFixupMatrix;
+
+                var btr = new NewBlendableTransform(fixedTransform);
+
+                btr.Translation.Z = -btr.Translation.Z;
+                btr.Rotation.X = -btr.Rotation.X;
+                btr.Rotation.Y = -btr.Rotation.Y;
+
+                return btr.GetMatrix();
             };
 
             //Func<DsBoneData, Matrix4x4> calculateParentTransform = (boneData) =>
