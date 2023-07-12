@@ -2,15 +2,18 @@
 using System.Collections.Generic;
 using System.Text;
 using SoulsFormats;
-using Autodesk.Fbx;
+//using Autodesk.Fbx;
 using System.Numerics;
 
 using System.Linq;
+using SharpGLTF.Geometry;
+using SharpGLTF.Materials;
+
 namespace Ds3FbxSharp
 {
-    using MeshBuilder = SharpGLTF.Geometry.MeshBuilder<SharpGLTF.Geometry.VertexTypes.VertexPositionNormal, SharpGLTF.Geometry.VertexTypes.VertexColor1Texture1, SharpGLTF.Geometry.VertexTypes.VertexJoints4>;
-    using PrimitiveBuilder = SharpGLTF.Geometry.PrimitiveBuilder<SharpGLTF.Materials.MaterialBuilder, SharpGLTF.Geometry.VertexTypes.VertexPositionNormal, SharpGLTF.Geometry.VertexTypes.VertexColor1Texture1, SharpGLTF.Geometry.VertexTypes.VertexJoints4>;
-    using VertexBuilder = SharpGLTF.Geometry.VertexBuilder<SharpGLTF.Geometry.VertexTypes.VertexPositionNormalTangent, SharpGLTF.Geometry.VertexTypes.VertexTexture1, SharpGLTF.Geometry.VertexTypes.VertexJoints4>;
+    using MeshBuilder = SharpGLTF.Geometry.MeshBuilder<SharpGLTF.Geometry.VertexTypes.VertexPositionNormal, SharpGLTF.Geometry.VertexTypes.VertexColor1Texture1, SharpGLTF.Geometry.VertexTypes.VertexEmpty>;
+    using PrimitiveBuilder = SharpGLTF.Geometry.PrimitiveBuilder<SharpGLTF.Materials.MaterialBuilder, SharpGLTF.Geometry.VertexTypes.VertexPositionNormal, SharpGLTF.Geometry.VertexTypes.VertexColor1Texture1, SharpGLTF.Geometry.VertexTypes.VertexEmpty>;
+    using VertexBuilder = SharpGLTF.Geometry.VertexBuilder<SharpGLTF.Geometry.VertexTypes.VertexPositionNormalTangent, SharpGLTF.Geometry.VertexTypes.VertexTexture1, SharpGLTF.Geometry.VertexTypes.VertexEmpty>;
 
     public static class FbxConversions
     {
@@ -28,7 +31,7 @@ namespace Ds3FbxSharp
         //{
         //    return new FbxVector2(vector.X, vector.Y);
         //}
-        
+
         public static Vector3 ToVector3(this Vector4 vector)
         {
             return new Vector3(vector.X, vector.Y, vector.Z);
@@ -56,7 +59,7 @@ namespace Ds3FbxSharp
             float cosy_cosp = 1 - 2 * (q.Y * q.Y + q.Z * q.Z);
             angles.Z = (float)Math.Atan2(siny_cosp, cosy_cosp);
 
-            if ((Math.Abs(Math.Abs(angles.X) - Math.Abs(angles.Z)) <0.001) && (Math.Abs(Math.Abs(angles.X) - Math.PI) < 0.001  ))
+            if ((Math.Abs(Math.Abs(angles.X) - Math.Abs(angles.Z)) < 0.001) && (Math.Abs(Math.Abs(angles.X) - Math.PI) < 0.001))
             {
                 angles.X = angles.Z = 0;
             }
@@ -64,7 +67,7 @@ namespace Ds3FbxSharp
             return angles * 180 / (float)Math.PI;
         }
     }
-
+#if false
     public class FbxExportData<TSoulsData, TFbxData>
     {
         public FbxExportData(TSoulsData soulsData, TFbxData fbxData, FbxNode fbxNode)
@@ -118,27 +121,27 @@ namespace Ds3FbxSharp
             return new FbxExportData<TSoulsData, TFbxData>(soulsData, fbxData, node);
         }
     }
-
+#endif
     public struct MeshExportData
     {
         public FLVER2.Mesh mesh { get; set; }
         public FLVER.Bone meshRoot { get; set; }
     }
-    
-    abstract class ExporterMesh
+
+    public abstract class ExporterMesh
     {
         public abstract PrimitiveBuilder AddPrimitive(string name, int verticesCount);
 
         public abstract void InitPoints(int pointsCount);
 
-        MeshBuilder builder;
-        SharpGLTF.Materials.MaterialBuilder materialBuilder;
+        public abstract IMeshBuilder<MaterialBuilder> GetMesh();
     }
     class GltfExporterMesh : ExporterMesh
     {
         public GltfExporterMesh(string meshName)
         {
-            builder = new MeshBuilder(meshName);
+            builder = new MeshBuilder(meshName + "_Mesh");
+            materialBuilder = new MaterialBuilder(meshName + "_Material");
         }
 
         public override PrimitiveBuilder AddPrimitive(string name, int verticesCount)
@@ -150,6 +153,10 @@ namespace Ds3FbxSharp
         {
             //mesh.InitControlPoints(Souls.mesh.Vertices.Count);
             //builder.AddMesh();
+        }
+        public override IMeshBuilder<MaterialBuilder> GetMesh()
+        {
+            return builder;
         }
 
         MeshBuilder builder;
@@ -171,15 +178,13 @@ namespace Ds3FbxSharp
             string meshName = (Souls.meshRoot != null ? Souls.meshRoot.Name : "") + "_Mesh";
 
             ExporterMesh mesh = MyExporter.CreateMesh(meshName);
-            
+
             var primitive = mesh.AddPrimitive(meshName, Souls.mesh.Vertices.Count);
             //int layerIndex = mesh.CreateLayer();
 
             //FbxLayer layer = mesh.GetLayer(layerIndex);
 
             //FbxLayerContainer layerContainer = FbxLayerContainer.Create(Scene, meshName + "_LayerContainer");
-
-            VertexBuilder v = new VertexBuilder();
 
             //FbxLayerElementUV uv = FbxLayerElementUV.Create(layerContainer, "Diffuse");
             //layer.SetUVs(uv);
@@ -197,7 +202,7 @@ namespace Ds3FbxSharp
             //tangent.SetReferenceMode(FbxLayerElement.EReferenceMode.eDirect);
             //tangent.SetMappingMode(FbxLayerElement.EMappingMode.eByControlPoint);
 
-            Dictionary<int, VertexBuilder> vertexIndexToBuilder = new Dictionary<int, VertexBuilder>(Souls.mesh.Vertices.Count);
+            Dictionary<int, VertexBuilder<SharpGLTF.Geometry.VertexTypes.VertexPositionNormalTangent, SharpGLTF.Geometry.VertexTypes.VertexTexture1, SharpGLTF.Geometry.VertexTypes.VertexJoints4>> vertexIndexToBuilder = new Dictionary<int, VertexBuilder<SharpGLTF.Geometry.VertexTypes.VertexPositionNormalTangent, SharpGLTF.Geometry.VertexTypes.VertexTexture1, SharpGLTF.Geometry.VertexTypes.VertexJoints4>>(Souls.mesh.Vertices.Count);
 
             for (int vertexIndex = 0; vertexIndex < Souls.mesh.Vertices.Count; ++vertexIndex)
             {
@@ -219,7 +224,7 @@ namespace Ds3FbxSharp
                 var vertexPositionNormalTangent = new SharpGLTF.Geometry.VertexTypes.VertexPositionNormalTangent(position, vertex.Normal, vertex.Tangents[0]);
                 var vertexUv = new SharpGLTF.Geometry.VertexTypes.VertexTexture1(uvValue);
 
-                VertexBuilder builder = new VertexBuilder(vertexPositionNormalTangent, vertexUv);
+                VertexBuilder<SharpGLTF.Geometry.VertexTypes.VertexPositionNormalTangent, SharpGLTF.Geometry.VertexTypes.VertexTexture1, SharpGLTF.Geometry.VertexTypes.VertexJoints4> builder = new VertexBuilder<SharpGLTF.Geometry.VertexTypes.VertexPositionNormalTangent, SharpGLTF.Geometry.VertexTypes.VertexTexture1, SharpGLTF.Geometry.VertexTypes.VertexJoints4>(vertexPositionNormalTangent, vertexUv);
 
                 vertexIndexToBuilder[vertexIndex] = builder;
 

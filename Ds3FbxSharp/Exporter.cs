@@ -1,4 +1,4 @@
-﻿using Autodesk.Fbx;
+﻿//using Autodesk.Fbx;
 
 namespace Ds3FbxSharp
 {
@@ -10,14 +10,14 @@ namespace Ds3FbxSharp
             Souls = soulsType;
         }
 
-        protected Exporter(FbxObject owner, SoulsType soulsType)
-        {
-            Owner = owner;
-            Souls = soulsType;
-        }
+        //protected Exporter(FbxObject owner, SoulsType soulsType)
+        //{
+        //    Owner = owner;
+        //    Souls = soulsType;
+        //}
 
         public MyExporter MyExporter { get; }
-        public FbxObject Owner { get; }
+        //public FbxObject Owner { get; }
 
         public SoulsType Souls { get; }
 

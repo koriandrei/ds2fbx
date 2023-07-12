@@ -5,9 +5,10 @@ using System.Text;
 using System.Linq;
 
 using SoulsFormats;
-using Autodesk.Fbx;
+//using Autodesk.Fbx;
 namespace Ds3FbxSharp
 {
+#if false
     class SkinExportData
     {
         public SkinExportData(int activeMeshIndex, DsSkeleton skeleton, FLVER2 flver)
@@ -98,4 +99,5 @@ namespace Ds3FbxSharp
             return skin;
         }
     }
+#endif
 }

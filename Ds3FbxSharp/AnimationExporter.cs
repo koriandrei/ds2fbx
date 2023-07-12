@@ -5,7 +5,6 @@ using System.Text;
 using System.Linq;
 
 using SoulsFormats;
-using Autodesk.Fbx;
 using System.Numerics;
 
 using SFAnimExtensions.Havok;
@@ -13,6 +12,7 @@ using SFAnimExtensions;
 
 namespace Ds3FbxSharp
 {
+#if false
     class AnimationExportData
     {
         public HavokAnimationData dsAnimation;
@@ -232,4 +232,5 @@ namespace Ds3FbxSharp
             return null;
         }
     }
+#endif
 }

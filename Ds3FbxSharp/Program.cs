@@ -1,13 +1,14 @@
 ﻿using System;
 using System.Collections.Generic;
-using Autodesk.Fbx;
+//using Autodesk.Fbx;
 using SoulsFormats;
 using SFAnimExtensions;
 using System.Linq;
 
 namespace Ds3FbxSharp
 {
-    public abstract class MyExporter {
+    public abstract class MyExporter
+    {
         public abstract ExporterMesh CreateMesh(string meshName);
     };
 
@@ -92,8 +93,8 @@ where T3 : HKX.HKXObject
                 charToLookFor = args[0];
             }
 
-            var fileLookup = System.IO.Directory.GetFiles(@"G:\SteamLibrary\steamapps\common\DARK SOULS III\Game\chr\", string.Format(System.Globalization.CultureInfo.InvariantCulture, "*{0}*bnd.dcx", charToLookFor))
-                .Concat(System.IO.Directory.GetFiles(@"G:\SteamLibrary\steamapps\common\DARK SOULS III\Game\parts\", "bd_m_*bnd.dcx"))
+            var fileLookup = System.IO.Directory.GetFiles(@"F:\SteamLibrary\steamapps\common\DARK SOULS III\Game\chr\", string.Format(System.Globalization.CultureInfo.InvariantCulture, "*{0}*bnd.dcx", charToLookFor))
+                .Concat(System.IO.Directory.GetFiles(@"F:\SteamLibrary\steamapps\common\DARK SOULS III\Game\parts\", "bd_m_*bnd.dcx"))
                 .Select(path => new BND4Reader(path))
                 .SelectMany(bndReader => bndReader.Files.Where(file =>
                 {
@@ -131,23 +132,22 @@ where T3 : HKX.HKXObject
             //FbxScene scene = FbxScene.Create(m, sceneName);
             SharpGLTF.Scenes.SceneBuilder sceneBuilder = new SharpGLTF.Scenes.SceneBuilder(sceneName);
 
-            new SharpGLTF.Geometry.MeshBuilder<SharpGLTF.Geometry.VertexTypes.VertexPositionNormalTangent>().AddMesh;
-            // new SharpGLTF.Materials.MaterialBuilder();
-
             var meshes = flver?.Meshes.Select(mesh => new MeshExportData() { mesh = mesh, meshRoot = flver.Bones[mesh.DefaultBoneIndex] })
                 .Select(meshExportData => new MeshExporter(exporter, meshExportData))
-                .Select(exporter => exporter.Fbx.CreateExportData(exporter.Souls))
+                //.Select(exporter => exporter.Fbx.CreateExportData(exporter.Souls))
                 .ToList();
 
             if (meshes != null)
             {
                 foreach (var exportedMesh in meshes)
                 {
-                    sceneRoot.AddChild(exportedMesh.FbxNode);
+                    //var model = SharpGLTF.Schema2.ModelRoot.CreateModel();
+                    sceneBuilder.AddRigidMesh(exportedMesh.Fbx.GetMesh(), SharpGLTF.Transforms.AffineTransform.Identity);
+                    //sceneRoot.AddChild(exportedMesh.FbxNode);
                 }
             }
-
             Console.WriteLine("Exported meshes");
+#if false
 
             List<DsBone> bones = SkeletonFixup.FixupDsBones(flver, hkaSkeleton).ToList();
 
@@ -211,6 +211,9 @@ where T3 : HKX.HKXObject
             }
 
             m.Destroy();
+#endif
+            var scene = sceneBuilder.ToGltf2();
+            scene.SaveGLTF(charToLookFor + "_exported.gltf");
 
             Console.WriteLine("All done");
         }

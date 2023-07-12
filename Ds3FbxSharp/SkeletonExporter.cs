@@ -4,13 +4,14 @@ using System.Text;
 
 using SoulsFormats;
 using SFAnimExtensions;
-using Autodesk.Fbx;
+//using Autodesk.Fbx;
 
 using System.Linq;
 using System.Numerics;
 
 namespace Ds3FbxSharp
 {
+#if false
     class DsSkeleton
     {
         public readonly List<DsBoneData> boneDatas;
@@ -286,4 +287,5 @@ namespace Ds3FbxSharp
         public FbxScene Scene { get; }
         public FLVER2 Flver { get; }
     }
+#endif
 }
