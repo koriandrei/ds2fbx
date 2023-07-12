@@ -8,22 +8,26 @@ using System.Numerics;
 using System.Linq;
 namespace Ds3FbxSharp
 {
+    using MeshBuilder = SharpGLTF.Geometry.MeshBuilder<SharpGLTF.Geometry.VertexTypes.VertexPositionNormal, SharpGLTF.Geometry.VertexTypes.VertexColor1Texture1, SharpGLTF.Geometry.VertexTypes.VertexJoints4>;
+    using PrimitiveBuilder = SharpGLTF.Geometry.PrimitiveBuilder<SharpGLTF.Materials.MaterialBuilder, SharpGLTF.Geometry.VertexTypes.VertexPositionNormal, SharpGLTF.Geometry.VertexTypes.VertexColor1Texture1, SharpGLTF.Geometry.VertexTypes.VertexJoints4>;
+    using VertexBuilder = SharpGLTF.Geometry.VertexBuilder<SharpGLTF.Geometry.VertexTypes.VertexPositionNormalTangent, SharpGLTF.Geometry.VertexTypes.VertexTexture1, SharpGLTF.Geometry.VertexTypes.VertexJoints4>;
+
     public static class FbxConversions
     {
-        public static FbxVector4 ToFbxVector4(this Vector3 vector)
-        {
-            return new FbxVector4(vector.X, vector.Y, vector.Z);
-        }
+        //public static FbxVector4 ToFbxVector4(this Vector3 vector)
+        //{
+        //    return new FbxVector4(vector.X, vector.Y, vector.Z);
+        //}
 
-        public static FbxDouble3 ToFbxDouble3(this Vector3 vector)
-        {
-            return new FbxDouble3(vector.X, vector.Y, vector.Z);
-        }
+        //public static FbxDouble3 ToFbxDouble3(this Vector3 vector)
+        //{
+        //    return new FbxDouble3(vector.X, vector.Y, vector.Z);
+        //}
 
-        public static FbxVector2 ToFbxVector2(this Vector2 vector)
-        {
-            return new FbxVector2(vector.X, vector.Y);
-        }
+        //public static FbxVector2 ToFbxVector2(this Vector2 vector)
+        //{
+        //    return new FbxVector2(vector.X, vector.Y);
+        //}
         
         public static Vector3 ToVector3(this Vector4 vector)
         {
@@ -120,46 +124,80 @@ namespace Ds3FbxSharp
         public FLVER2.Mesh mesh { get; set; }
         public FLVER.Bone meshRoot { get; set; }
     }
-
-    public class MeshExporter : Exporter<MeshExportData, FbxMesh>
+    
+    abstract class ExporterMesh
     {
-        public MeshExporter(FbxScene scene, FLVER2.Mesh mesh) : base(scene, new MeshExportData { mesh = mesh })
+        public abstract PrimitiveBuilder AddPrimitive(string name, int verticesCount);
+
+        public abstract void InitPoints(int pointsCount);
+
+        MeshBuilder builder;
+        SharpGLTF.Materials.MaterialBuilder materialBuilder;
+    }
+    class GltfExporterMesh : ExporterMesh
+    {
+        public GltfExporterMesh(string meshName)
+        {
+            builder = new MeshBuilder(meshName);
+        }
+
+        public override PrimitiveBuilder AddPrimitive(string name, int verticesCount)
+        {
+            return builder.UsePrimitive(materialBuilder);
+        }
+
+        public override void InitPoints(int pointsCount)
+        {
+            //mesh.InitControlPoints(Souls.mesh.Vertices.Count);
+            //builder.AddMesh();
+        }
+
+        MeshBuilder builder;
+        SharpGLTF.Materials.MaterialBuilder materialBuilder;
+    }
+
+    public class MeshExporter : Exporter<MeshExportData, ExporterMesh>
+    {
+        public MeshExporter(MyExporter exporter, FLVER2.Mesh mesh) : base(exporter, new MeshExportData { mesh = mesh })
         {
         }
 
-        public MeshExporter(FbxScene scene, MeshExportData exportData) : base(scene, exportData)
+        public MeshExporter(MyExporter exporter, MeshExportData exportData) : base(exporter, exportData)
         {
         }
 
-        protected override FbxMesh GenerateFbx()
+        protected override ExporterMesh GenerateFbx()
         {
             string meshName = (Souls.meshRoot != null ? Souls.meshRoot.Name : "") + "_Mesh";
 
-            FbxMesh mesh = FbxMesh.Create(Scene, meshName);
+            ExporterMesh mesh = MyExporter.CreateMesh(meshName);
+            
+            var primitive = mesh.AddPrimitive(meshName, Souls.mesh.Vertices.Count);
+            //int layerIndex = mesh.CreateLayer();
 
-            mesh.InitControlPoints(Souls.mesh.Vertices.Count);
+            //FbxLayer layer = mesh.GetLayer(layerIndex);
 
-            int layerIndex = mesh.CreateLayer();
+            //FbxLayerContainer layerContainer = FbxLayerContainer.Create(Scene, meshName + "_LayerContainer");
 
-            FbxLayer layer = mesh.GetLayer(layerIndex);
+            VertexBuilder v = new VertexBuilder();
 
-            FbxLayerContainer layerContainer = FbxLayerContainer.Create(Scene, meshName + "_LayerContainer");
+            //FbxLayerElementUV uv = FbxLayerElementUV.Create(layerContainer, "Diffuse");
+            //layer.SetUVs(uv);
 
-            FbxLayerElementUV uv = FbxLayerElementUV.Create(layerContainer, "Diffuse");
-            layer.SetUVs(uv);
+            //FbxLayerElementNormal normal = FbxLayerElementNormal.Create(layerContainer, "Normal");
+            //layer.SetNormals(normal);
+            //normal.SetReferenceMode(FbxLayerElement.EReferenceMode.eDirect);
+            //normal.SetMappingMode(FbxLayerElement.EMappingMode.eByControlPoint);
 
-            FbxLayerElementNormal normal = FbxLayerElementNormal.Create(layerContainer, "Normal");
-            layer.SetNormals(normal);
-            normal.SetReferenceMode(FbxLayerElement.EReferenceMode.eDirect);
-            normal.SetMappingMode(FbxLayerElement.EMappingMode.eByControlPoint);
+            //FbxLayerElementBinormal binormal = FbxLayerElementBinormal.Create(layerContainer, "Binormal");
+            //layer.SetBinormals(binormal);
 
-            FbxLayerElementBinormal binormal = FbxLayerElementBinormal.Create(layerContainer, "Binormal");
-            layer.SetBinormals(binormal);
+            //FbxLayerElementTangent tangent = FbxLayerElementTangent.Create(layerContainer, "Tangent");
+            //layer.SetTangents(tangent);
+            //tangent.SetReferenceMode(FbxLayerElement.EReferenceMode.eDirect);
+            //tangent.SetMappingMode(FbxLayerElement.EMappingMode.eByControlPoint);
 
-            FbxLayerElementTangent tangent = FbxLayerElementTangent.Create(layerContainer, "Tangent");
-            layer.SetTangents(tangent);
-            tangent.SetReferenceMode(FbxLayerElement.EReferenceMode.eDirect);
-            tangent.SetMappingMode(FbxLayerElement.EMappingMode.eByControlPoint);
+            Dictionary<int, VertexBuilder> vertexIndexToBuilder = new Dictionary<int, VertexBuilder>(Souls.mesh.Vertices.Count);
 
             for (int vertexIndex = 0; vertexIndex < Souls.mesh.Vertices.Count; ++vertexIndex)
             {
@@ -171,21 +209,29 @@ namespace Ds3FbxSharp
                 // and it appears like it holds weapons in the left hand
                 position.Z = -position.Z;
 
-                normal.GetDirectArray().Add(vertex.Normal.ToFbxVector4());
-
-                tangent.GetDirectArray().Add(new FbxVector4(vertex.Tangents[0].X, vertex.Tangents[0].Y, vertex.Tangents[0].Z));
-
                 Vector2 uvValue = new Vector2(0);
-
                 if (vertex.UVs.Count > 0)
                 {
                     uvValue.X = vertex.UVs[0].X;
                     uvValue.Y = vertex.UVs[0].Y;
                 }
 
-                uv.GetDirectArray().Add(uvValue.ToFbxVector2());
+                var vertexPositionNormalTangent = new SharpGLTF.Geometry.VertexTypes.VertexPositionNormalTangent(position, vertex.Normal, vertex.Tangents[0]);
+                var vertexUv = new SharpGLTF.Geometry.VertexTypes.VertexTexture1(uvValue);
 
-                mesh.SetControlPointAt(position.ToFbxVector4(), vertexIndex);
+                VertexBuilder builder = new VertexBuilder(vertexPositionNormalTangent, vertexUv);
+
+                vertexIndexToBuilder[vertexIndex] = builder;
+
+                //normal.GetDirectArray().Add(vertex.Normal.ToFbxVector4());
+
+                //tangent.GetDirectArray().Add(new FbxVector4(vertex.Tangents[0].X, vertex.Tangents[0].Y, vertex.Tangents[0].Z));
+
+
+
+                //uv.GetDirectArray().Add(uvValue.ToFbxVector2());
+
+                //mesh.SetControlPointAt(position.ToFbxVector4(), vertexIndex);
             }
 
             for (int faceSetIndex = 0; faceSetIndex < Souls.mesh.FaceSets.Count; ++faceSetIndex)
@@ -199,24 +245,24 @@ namespace Ds3FbxSharp
 
                 for (int faceStartIndex = 0; faceStartIndex < faceSet.Indices.Count; faceStartIndex += 3)
                 {
-                    mesh.AddCompletePolygon(
-                        faceSet.Indices[faceStartIndex], 
-                        faceSet.Indices[faceStartIndex + 1], 
-                        faceSet.Indices[faceStartIndex + 2]
-                    );
+                    int[] vertexIndices = new int[3]{faceSet.Indices[faceStartIndex],
+                        faceSet.Indices[faceStartIndex + 1],
+                        faceSet.Indices[faceStartIndex + 2]};
+                    primitive.AddTriangle(vertexIndexToBuilder[vertexIndices[0]], vertexIndexToBuilder[vertexIndices[1]], vertexIndexToBuilder[vertexIndices[2]]);
+
                     //mesh.AddCompletePolygon(
-                    //    faceSet.Indices[faceStartIndex + 2],
-                    //    faceSet.Indices[faceStartIndex + 1],
-                    //    faceSet.Indices[faceStartIndex]
+                    //    vertexIndices[0],
+                    //    vertexIndices[1],
+                    //    vertexIndices[2]
                     //);
                 }
             }
 
-            mesh.BuildMeshEdgeArray();
+            //mesh.BuildMeshEdgeArray();
 
-            FbxGeometryConverter converter = new FbxGeometryConverter(Scene.GetFbxManager());
-            converter.ComputeEdgeSmoothingFromNormals(mesh);
-            converter.ComputePolygonSmoothingFromEdgeSmoothing(mesh);
+            //FbxGeometryConverter converter = new FbxGeometryConverter(Scene.GetFbxManager());
+            //converter.ComputeEdgeSmoothingFromNormals(mesh);
+            //converter.ComputePolygonSmoothingFromEdgeSmoothing(mesh);
 
             return mesh;
         }

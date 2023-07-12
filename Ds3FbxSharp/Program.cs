@@ -4,8 +4,21 @@ using Autodesk.Fbx;
 using SoulsFormats;
 using SFAnimExtensions;
 using System.Linq;
+
 namespace Ds3FbxSharp
 {
+    public abstract class MyExporter {
+        public abstract ExporterMesh CreateMesh(string meshName);
+    };
+
+    class GltfExporter : MyExporter
+    {
+        public override ExporterMesh CreateMesh(string meshName)
+        {
+            return new GltfExporterMesh(meshName);
+        }
+    }
+
     class Program
     {
         enum ModelDataType
@@ -28,16 +41,6 @@ namespace Ds3FbxSharp
             }
 
             return ModelDataType.Unk;
-        }
-
-        static void PrintFbxNode(FbxNode node, string prefix = "")
-        {
-            Console.WriteLine(prefix + node.GetName());
-
-            for (int childIndex = 0; childIndex < node.GetChildCount(); ++childIndex)
-            {
-                PrintFbxNode(node.GetChild(childIndex), prefix + "--");
-            }
         }
 
         static (T1, T2, T3) GetHkxObjectsFromHkx<T1, T2, T3>(HKX hkx) where T1 : HKX.HKXObject where T2 : HKX.HKXObject
@@ -122,16 +125,17 @@ where T3 : HKX.HKXObject
 
             HKX.HKAAnimationBinding binding = GetHkxObjects<HKX.HKAAnimationBinding>(hkxs).First();
 
-            FbxManager m = FbxManager.Create();
+            MyExporter exporter = new GltfExporter();
 
-            FbxScene scene = FbxScene.Create(m, "BlackKnight");
+            string sceneName = "BlackKnight";
+            //FbxScene scene = FbxScene.Create(m, sceneName);
+            SharpGLTF.Scenes.SceneBuilder sceneBuilder = new SharpGLTF.Scenes.SceneBuilder(sceneName);
 
-
-
-            FbxNode sceneRoot = scene.GetRootNode();
+            new SharpGLTF.Geometry.MeshBuilder<SharpGLTF.Geometry.VertexTypes.VertexPositionNormalTangent>().AddMesh;
+            // new SharpGLTF.Materials.MaterialBuilder();
 
             var meshes = flver?.Meshes.Select(mesh => new MeshExportData() { mesh = mesh, meshRoot = flver.Bones[mesh.DefaultBoneIndex] })
-                .Select(meshExportData => new MeshExporter(scene, meshExportData))
+                .Select(meshExportData => new MeshExporter(exporter, meshExportData))
                 .Select(exporter => exporter.Fbx.CreateExportData(exporter.Souls))
                 .ToList();
 

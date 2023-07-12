@@ -4,9 +4,9 @@ namespace Ds3FbxSharp
 {
     public abstract class Exporter<SoulsType, FbxType>
     {
-        protected Exporter(FbxScene scene, SoulsType soulsType)
+        protected Exporter(MyExporter exporter, SoulsType soulsType)
         {
-            Scene = scene;
+            MyExporter = exporter;
             Souls = soulsType;
         }
 
@@ -16,7 +16,7 @@ namespace Ds3FbxSharp
             Souls = soulsType;
         }
 
-        public FbxScene Scene { get; }
+        public MyExporter MyExporter { get; }
         public FbxObject Owner { get; }
 
         public SoulsType Souls { get; }
