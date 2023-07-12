@@ -4,19 +4,33 @@ using System.Collections.Generic;
 using SoulsFormats;
 using SFAnimExtensions;
 using System.Linq;
+using SharpGLTF.Scenes;
 
 namespace Ds3FbxSharp
 {
     public abstract class MyExporter
     {
         public abstract ExporterMesh CreateMesh(string meshName);
+        public abstract ExporterSkeletonRoot CreateSkeletonRoot(string rootBoneName);
     };
 
     class GltfExporter : MyExporter
     {
+        public GltfExporter(SharpGLTF.Scenes.SceneBuilder sceneBuilder)
+        {
+            SceneBuilder = sceneBuilder;
+        }
+
+        public SceneBuilder SceneBuilder { get; }
+
         public override ExporterMesh CreateMesh(string meshName)
         {
             return new GltfExporterMesh(meshName);
+        }
+
+        public override ExporterSkeletonRoot CreateSkeletonRoot(string rootBoneName)
+        {
+            return new GltfExporterSkeletonRoot(SceneBuilder, rootBoneName);
         }
     }
 
@@ -94,12 +108,17 @@ where T3 : HKX.HKXObject
             }
 
             var fileLookup = System.IO.Directory.GetFiles(@"F:\SteamLibrary\steamapps\common\DARK SOULS III\Game\chr\", string.Format(System.Globalization.CultureInfo.InvariantCulture, "*{0}*bnd.dcx", charToLookFor))
-                .Concat(System.IO.Directory.GetFiles(@"F:\SteamLibrary\steamapps\common\DARK SOULS III\Game\parts\", "bd_m_*bnd.dcx"))
+                .Concat(charToLookFor.Equals("0000") ? System.IO.Directory.GetFiles(@"F:\SteamLibrary\steamapps\common\DARK SOULS III\Game\parts\", "bd_m_*bnd.dcx") : new string[0])
                 .Select(path => new BND4Reader(path))
                 .SelectMany(bndReader => bndReader.Files.Where(file =>
                 {
                     if (file.Name.EndsWith("hkx"))
                     {
+                        if (!charToLookFor.Equals("0000"))
+                        {
+                            return true;
+                        }
+
                         bool isAnimHkx = file.Name.Substring(file.Name.LastIndexOf("\\") + 1).StartsWith("a10");
 
                         return isAnimHkx;
@@ -117,7 +136,7 @@ where T3 : HKX.HKXObject
 
             Console.WriteLine("Loaded files");
 
-            FLVER2 flver = fileLookup[ModelDataType.Flver].Select(FLVER2.Read).Where(flver => flver.Meshes.Count > 0).ElementAt(7);
+            FLVER2 flver = fileLookup[ModelDataType.Flver].Select(FLVER2.Read).Where(flver => flver.Meshes.Count > 0).First();//.ElementAt(7);
             var hkxs = fileLookup[ModelDataType.Hkx].Select(HKX.Read);
             var skeletons = GetHkxObjects<HKX.HKASkeleton>(hkxs);
 
@@ -126,11 +145,11 @@ where T3 : HKX.HKXObject
 
             HKX.HKAAnimationBinding binding = GetHkxObjects<HKX.HKAAnimationBinding>(hkxs).First();
 
-            MyExporter exporter = new GltfExporter();
-
             string sceneName = "BlackKnight";
             //FbxScene scene = FbxScene.Create(m, sceneName);
             SharpGLTF.Scenes.SceneBuilder sceneBuilder = new SharpGLTF.Scenes.SceneBuilder(sceneName);
+
+            MyExporter exporter = new GltfExporter(sceneBuilder);
 
             var meshes = flver?.Meshes.Select(mesh => new MeshExportData() { mesh = mesh, meshRoot = flver.Bones[mesh.DefaultBoneIndex] })
                 .Select(meshExportData => new MeshExporter(exporter, meshExportData))
@@ -147,14 +166,14 @@ where T3 : HKX.HKXObject
                 }
             }
             Console.WriteLine("Exported meshes");
-#if false
 
             List<DsBone> bones = SkeletonFixup.FixupDsBones(flver, hkaSkeleton).ToList();
 
-            DsSkeleton skeleton = new SkeletonExporter(scene, flver, hkaSkeleton, bones).ParseSkeleton();
+            DsSkeleton skeleton = new SkeletonExporter(exporter, flver, hkaSkeleton, bones).ParseSkeleton();
 
             Console.WriteLine("Exported skeleton");
 
+#if false
             if (meshes != null)
             {
                 foreach (var meshData in meshes)

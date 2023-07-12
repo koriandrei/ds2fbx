@@ -8,10 +8,34 @@ using SFAnimExtensions;
 
 using System.Linq;
 using System.Numerics;
+using SharpGLTF.Scenes;
 
 namespace Ds3FbxSharp
 {
-#if false
+    using FbxNode = SharpGLTF.Scenes.NodeBuilder;
+    using NodeBuilder = SharpGLTF.Scenes.NodeBuilder;
+
+    public abstract class ExporterSkeletonRoot
+    {
+        public abstract void AddNode(NodeBuilder fbxData);
+    }
+
+    internal class GltfExporterSkeletonRoot : ExporterSkeletonRoot
+    {
+        public GltfExporterSkeletonRoot(SceneBuilder sceneBuilder, string rootBoneName)
+        {
+            rootNode = new NodeBuilder(rootBoneName);
+            sceneBuilder.AddNode(rootNode);
+        }
+
+        public override void AddNode(NodeBuilder childNode)
+        {
+            rootNode.AddNode(childNode);
+        }
+
+        FbxNode rootNode;
+    }
+
     class DsSkeleton
     {
         public readonly List<DsBoneData> boneDatas;
@@ -30,31 +54,31 @@ namespace Ds3FbxSharp
         {
             Console.WriteLine("Recursing");
 
-            return baseDatas.SelectMany(baseData => new[] { baseData.exportData.SoulsData.Name }.Concat( GetChildren(boneDatas.Where(boneData => boneData.parent == baseData)).Select(child => "--" + child)));
+            return baseDatas.SelectMany(baseData => new[] { baseData.exportData.SoulsData.Name }.Concat(GetChildren(boneDatas.Where(boneData => boneData.parent == baseData)).Select(child => "--" + child)));
         }
 
         public override string ToString()
         {
-            return GetChildren(roots.ToList()).Aggregate((head, tail)=> head + Environment.NewLine + tail);
+            return GetChildren(roots.ToList()).Aggregate((head, tail) => head + Environment.NewLine + tail);
         }
     }
 
     class DsBoneData
     {
-        public FbxExportData<DsBone, FbxSkeleton> exportData { get; }
+        public FbxExportData<DsBone, SharpGLTF.Scenes.NodeBuilder> exportData { get; }
 
         public DsBoneData parent;
         public readonly FLVER.Bone flverBone;
 
-        public DsBoneData(DsBone bone, FLVER.Bone flverBone, FbxScene scene)
+        public DsBoneData(DsBone bone, FLVER.Bone flverBone, MyExporter exporter)
         {
-            FbxSkeleton fbxBone = FbxSkeleton.Create(scene, bone.Name + "Bone");
+            var gltfBone = new SharpGLTF.Scenes.NodeBuilder(bone.Name + "_Bone");
 
-            fbxBone.SetSkeletonType(flverBone.ChildIndex >= 0 ? FbxSkeleton.EType.eLimb : FbxSkeleton.EType.eEffector);
+            //fbxBone.SetSkeletonType(flverBone.ChildIndex >= 0 ? FbxSkeleton.EType.eLimb : FbxSkeleton.EType.eEffector);
 
-            fbxBone.Size.Set(flverBone.Translation.Length());
+            //fbxBone.Size.Set(flverBone.Translation.Length());
 
-            exportData = fbxBone.CreateExportDataWithScene(bone, scene);
+            exportData = gltfBone.CreateExportDataWithScene(bone, exporter);
 
             this.flverBone = flverBone;
         }
@@ -65,7 +89,8 @@ namespace Ds3FbxSharp
 
             if (parentBoneData != null)
             {
-                parentBoneData.exportData.FbxNode.AddChild(exportData.FbxNode);
+                parentBoneData.exportData.FbxData.AddNode(exportData.FbxData);
+                //parentBoneData.exportData.FbxNode.AddChild(exportData.FbxNode);
             }
         }
     }
@@ -76,9 +101,9 @@ namespace Ds3FbxSharp
 
         private readonly HKX.HKASkeleton hkaSkeleton;
 
-        public SkeletonExporter(FbxScene scene, FLVER2 flver, HKX.HKASkeleton hKASkeleton, List<DsBone> bones)
+        public SkeletonExporter(MyExporter exporter, FLVER2 flver, HKX.HKASkeleton hKASkeleton, List<DsBone> bones)
         {
-            Scene = scene;
+            Exporter = exporter;
             this.Flver = flver;
             this.bones = bones;
             this.hkaSkeleton = hKASkeleton;
@@ -154,7 +179,7 @@ namespace Ds3FbxSharp
                 {
                     FLVER.Bone flverBone = Flver.Bones.Single(flverBone => flverBone.Name == bone.Name);
 
-                    return new DsBoneData(bone, flverBone, Scene);
+                    return new DsBoneData(bone, flverBone, Exporter);
                 }
                 ).ToList();
 
@@ -257,35 +282,41 @@ namespace Ds3FbxSharp
 
                 if (Matrix4x4.Decompose(globalTransform, out scale, out rotation, out translation))
                 {
-                    boneData.exportData.FbxNode.LclTranslation.Set(translation.ToFbxDouble3());
+                    boneData.exportData.FbxData.SetLocalTransform(new SharpGLTF.Transforms.AffineTransform(scale, rotation, translation), false);
+                    //boneData.exportData.FbxNode.LclTranslation.Set(translation.ToFbxDouble3());
 
-                    Vector3 euler = rotation.QuaternionToEuler();
+                    //Vector3 euler = rotation.QuaternionToEuler();
 
-                    boneData.exportData.FbxNode.LclRotation.Set(euler.ToFbxDouble3());
+                    //boneData.exportData.FbxNode.LclRotation.Set(euler.ToFbxDouble3());
 
-                    boneData.exportData.FbxNode.LclScaling.Set(scale.ToFbxDouble3());
+                    //boneData.exportData.FbxNode.LclScaling.Set(scale.ToFbxDouble3());
                 }
                 else
                 {
                     throw new Exception();
                 }
-                
+
             }
 
             //FbxSkeleton skeletonRoot = FbxSkeleton.Create(Scene, "ActualRoot");
 
             //FbxNode skeletonRootNode = skeletonRoot.CreateNode();
+            //var skeletonRootNode = Exporter.CreateSkeletonRoot("ActualRoot");
 
             foreach (var root in boneDatas.Where(bone => bone.parent == null))
             {
-                Scene.GetRootNode().AddChild(root.exportData.FbxNode);
+                var extraRootNode = Exporter.CreateSkeletonRoot(root.exportData.SoulsData.Name);
+                extraRootNode.AddNode(root.exportData.FbxData);
+                //skeletonRootNode.AddNode(extraRootNode);
+                // Scene.GetRootNode().AddChild(root.exportData.FbxNode);
             }
+
+
 
             return new DsSkeleton(null, boneDatas);
         }
 
-        public FbxScene Scene { get; }
+        public MyExporter Exporter { get; }
         public FLVER2 Flver { get; }
     }
-#endif
 }

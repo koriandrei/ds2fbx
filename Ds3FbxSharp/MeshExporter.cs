@@ -67,23 +67,22 @@ namespace Ds3FbxSharp
             return angles * 180 / (float)Math.PI;
         }
     }
-#if false
+    
     public class FbxExportData<TSoulsData, TFbxData>
     {
-        public FbxExportData(TSoulsData soulsData, TFbxData fbxData, FbxNode fbxNode)
+        public FbxExportData(TSoulsData soulsData, TFbxData fbxData)
         {
             this.SoulsData = soulsData;
             this.FbxData = fbxData;
-            FbxNode = fbxNode;
         }
 
         public TSoulsData SoulsData { get; }
         public TFbxData FbxData { get; }
-        public FbxNode FbxNode { get; }
     }
 
     public static class FbxExtensions
     {
+#if false
         public static FbxMesh AddCompletePolygon(this FbxMesh mesh, params int[] vertexIndices)
         {
             mesh.BeginPolygon();
@@ -106,22 +105,22 @@ namespace Ds3FbxSharp
 
             return node;
         }
-
-        public static FbxExportData<TSoulsData, TFbxData> CreateExportData<TSoulsData, TFbxData>(this TFbxData fbxData, TSoulsData soulsData) where TFbxData: FbxNodeAttribute
+#endif
+        public static FbxExportData<TSoulsData, TFbxData> CreateExportData<TSoulsData, TFbxData>(this TFbxData fbxData, TSoulsData soulsData) where TFbxData: SharpGLTF.BaseBuilder
         {
-            return new FbxExportData<TSoulsData, TFbxData>(soulsData, fbxData, fbxData.CreateNode());
+            return new FbxExportData<TSoulsData, TFbxData>(soulsData, fbxData);
         }
 
-        public static FbxExportData<TSoulsData, TFbxData> CreateExportDataWithScene<TSoulsData, TFbxData>(this TFbxData fbxData, TSoulsData soulsData, FbxScene scene) where TFbxData: FbxNodeAttribute
+        public static FbxExportData<TSoulsData, TFbxData> CreateExportDataWithScene<TSoulsData, TFbxData>(this TFbxData fbxData, TSoulsData soulsData, MyExporter exporter) where TFbxData: SharpGLTF.BaseBuilder
         {
-            FbxNode node = FbxNode.Create(scene, fbxData.GetName() + "_Node");
+            //FbxNode node = FbxNode.Create(scene, fbxData.GetName() + "_Node");
 
-            node.SetNodeAttribute(fbxData);
-
-            return new FbxExportData<TSoulsData, TFbxData>(soulsData, fbxData, node);
+            //node.SetNodeAttribute(fbxData);
+            
+            return new FbxExportData<TSoulsData, TFbxData>(soulsData, fbxData);
         }
     }
-#endif
+
     public struct MeshExportData
     {
         public FLVER2.Mesh mesh { get; set; }
